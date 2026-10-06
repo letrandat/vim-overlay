@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "vim-overlay",
+  "version": "0.1.0",
+  "description": "Adds missing Vim features to the Vim mode a page's code editor already runs.",
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "all_frames": true,
+      "world": "MAIN",
+      "js": [
+        "src/registry.js",
+        "src/hosts/monaco-vim.js",
+        "src/hosts/codemirror6.js",
+        "src/hosts/codemirror5.js",
+        "src/hosts/ace.js",
+        "src/features/indent-object.js",
+        "src/main.js"
+      ]
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "vim-overlay@letrandat.github.io",
+      "strict_min_version": "128.0"
+    }
+  }
+}

@@ -1,0 +1,1 @@
+window.vimOverlay ??= { hosts: [], features: [] };
