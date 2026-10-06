@@ -1,0 +1,22 @@
+<!doctype html>
+<meta charset="utf-8" />
+<div id="host"></div>
+<script src="common.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/ace-builds@1.44.0/src-noconflict/ace.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/ace-builds@1.44.0/src-noconflict/keybinding-vim.js"></script>
+<script>
+  const vimModule = ace.require("ace/keyboard/vim");
+  track(vimModule.Vim);
+  let editor;
+  window.setText = (text) => editor.setValue(text, -1);
+  window.remount = () => {
+    if (editor) editor.destroy(), editor.container.remove();
+    const el = document.createElement("div");
+    el.style.cssText = "width: 900px; height: 500px";
+    document.getElementById("host").append(el);
+    editor = ace.edit(el, { tabSize: 4, useSoftTabs: true });
+    editor.setKeyboardHandler(vimModule.handler);
+    watch(editor.state.cm);
+  };
+  remount();
+</script>

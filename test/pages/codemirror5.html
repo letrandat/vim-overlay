@@ -1,0 +1,21 @@
+<!doctype html>
+<meta charset="utf-8" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.21/lib/codemirror.css" />
+<div id="editor"></div>
+<script src="common.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.21/lib/codemirror.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.21/addon/search/searchcursor.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.21/addon/dialog/dialog.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.21/addon/edit/matchbrackets.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.21/keymap/vim.js"></script>
+<script>
+  track(CodeMirror.Vim);
+  let editor;
+  window.setText = (text) => editor.setValue(text);
+  window.remount = () => {
+    editor?.getWrapperElement().remove();
+    editor = CodeMirror(document.getElementById("editor"), { keyMap: "vim", tabSize: 4, indentUnit: 4 });
+    watch(editor);
+  };
+  remount();
+</script>

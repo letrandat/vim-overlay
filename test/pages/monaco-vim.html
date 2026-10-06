@@ -1,0 +1,39 @@
+<!doctype html>
+<!-- Monaco + monaco-vim wired the way LeetCode does it: window.monacoVim appears 1.5 s after load. -->
+<meta charset="utf-8" />
+<div id="editor" style="width: 900px; height: 500px"></div>
+<div id="status"></div>
+<script src="common.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
+<script>
+  require.config({
+    paths: {
+      vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs",
+      "monaco-vim": "https://cdn.jsdelivr.net/npm/monaco-vim@0.4.4/dist/monaco-vim.umd",
+    },
+  });
+  require(["vs/editor/editor.main"], () => {
+    // Load the UMD build through AMD so it does not set the MonacoVim global.
+    define("monaco-editor/esm/vs/editor/editor.api", [], () => monaco);
+    require(["monaco-vim"], (MonacoVim) => {
+      track(MonacoVim.VimMode.Vim);
+      let editor, adapter;
+      window.setText = (text) => editor.setValue(text);
+      window.remount = () => {
+        adapter?.dispose();
+        editor?.dispose();
+        editor = monaco.editor.create(document.getElementById("editor"), {
+          language: "python",
+          tabSize: 4,
+          insertSpaces: true,
+          detectIndentation: false,
+          minimap: { enabled: false },
+        });
+        adapter = MonacoVim.initVimMode(editor, document.getElementById("status"));
+        watch(adapter);
+      };
+      remount();
+      setTimeout(() => (window.monacoVim = MonacoVim), 1500);
+    });
+  });
+</script>
