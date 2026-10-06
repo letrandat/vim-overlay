@@ -1,0 +1,10 @@
+{
+  "private": true,
+  "scripts": {
+    "test": "node node.test.cjs && node browser.test.cjs",
+    "oracle": "node make-oracle.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}

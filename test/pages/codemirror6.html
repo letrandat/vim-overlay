@@ -1,0 +1,49 @@
+<!doctype html>
+<!--
+  CodeMirror 6 + @replit/codemirror-vim from jsDelivr, deduplicated through an import map.
+  ?expose=1 sets getCM(view).constructor.Vim = Vim, the path the codemirror6 host reads;
+  stock @replit/codemirror-vim does not set it. ?view=<version> picks @codemirror/view.
+-->
+<meta charset="utf-8" />
+<div id="editor"></div>
+<script src="common.js"></script>
+<script>
+  const q = new URLSearchParams(location.search);
+  const npm = (spec) => `https://cdn.jsdelivr.net/npm/${spec}`;
+  const imports = {
+    "@codemirror/state": npm("@codemirror/state@6.7.6/dist/index.js"),
+    "@codemirror/view": npm(`@codemirror/view@${q.get("view") || "6.43.13"}/dist/index.js`),
+    "@codemirror/language": npm("@codemirror/language@6.12.4/dist/index.js"),
+    "@codemirror/search": npm("@codemirror/search@6.7.2/dist/index.js"),
+    "@codemirror/commands": npm("@codemirror/commands@6.11.1/dist/index.js"),
+    "@lezer/common": npm("@lezer/common@1.5.3/dist/index.js"),
+    "@lezer/highlight": npm("@lezer/highlight@1.2.5/dist/index.js"),
+    "@marijn/find-cluster-break": npm("@marijn/find-cluster-break@1.0.4/src/index.js"),
+    "style-mod": npm("style-mod@4.1.4/src/style-mod.js"),
+    "w3c-keyname": npm("w3c-keyname@2.2.8/index.js"),
+    crelt: npm("crelt@1.0.7/index.js"),
+    "@replit/codemirror-vim": npm("@replit/codemirror-vim@6.4.0/dist/index.js"),
+    "@replit/codemirror-vim-core": npm("@replit/codemirror-vim-core@0.1.0/vim.js"),
+  };
+  const map = document.createElement("script");
+  map.type = "importmap";
+  map.textContent = JSON.stringify({ imports });
+  document.currentScript.after(map);
+</script>
+<script type="module">
+  import { EditorView } from "@codemirror/view";
+  import { history } from "@codemirror/commands";
+  import { indentUnit } from "@codemirror/language";
+  import { vim, Vim, getCM } from "@replit/codemirror-vim";
+
+  track(Vim);
+  let view;
+  window.setText = (text) => window.cm.setValue(text);
+  window.remount = () => {
+    view?.destroy();
+    view = new EditorView({ parent: document.getElementById("editor"), extensions: [vim(), history(), indentUnit.of("    ")] });
+    if (new URLSearchParams(location.search).get("expose")) getCM(view).constructor.Vim = Vim;
+    watch(getCM(view));
+  };
+  remount();
+</script>
