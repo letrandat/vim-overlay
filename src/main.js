@@ -5,22 +5,22 @@
   overlay.installed = new WeakSet();
 
   function scan() {
-    for (const host of overlay.hosts) {
+    for (const [name, find] of Object.entries(overlay.hosts)) {
       let found;
       try {
-        found = host.find();
+        found = find();
       } catch (err) {
-        console.warn(`[vim-overlay] host ${host.name} failed:`, err);
+        console.warn(`[vim-overlay] host ${name} failed:`, err);
         continue;
       }
       for (const Vim of found) {
         if (!Vim || overlay.installed.has(Vim)) continue;
         overlay.installed.add(Vim);
-        for (const feature of overlay.features) {
+        for (const [name, install] of Object.entries(overlay.features)) {
           try {
-            feature.install(Vim);
+            install(Vim);
           } catch (err) {
-            console.warn(`[vim-overlay] feature ${feature.name} failed:`, err);
+            console.warn(`[vim-overlay] feature ${name} failed:`, err);
           }
         }
       }

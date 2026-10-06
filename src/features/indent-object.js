@@ -88,11 +88,13 @@
   // vim.js motion: (cm, head, motionArgs, vim) -> [anchor, head]. cm is the
   // host's CodeMirror-compatible adapter.
   function indentObjectMotion(cm, head, args, vim) {
+    // A CodeMirror 5 document can start at a line other than 0; findIndentBlock counts from 0.
+    const first = cm.firstLine?.() ?? 0;
     const lines = [];
-    for (let i = 0; i <= cm.lastLine(); i++) lines.push(cm.getLine(i));
+    for (let i = first; i <= cm.lastLine(); i++) lines.push(cm.getLine(i));
     const visual = vim.visualMode;
-    const from = visual ? vim.sel.anchor.line : head.line;
-    const to = visual ? vim.sel.head.line : head.line;
+    const from = (visual ? vim.sel.anchor.line : head.line) - first;
+    const to = (visual ? vim.sel.head.line : head.line) - first;
     const top = Math.min(from, to), bottom = Math.max(from, to);
     // Pressing the object again on its own result selects the enclosing block.
     const last = lastRange.get(cm);
@@ -114,15 +116,12 @@
       // Every adapter class has the static signal() that vim.js itself uses for mode changes.
       cm.constructor.signal?.(cm, "vim-mode-change", { mode: "visual", subMode: "linewise" });
     }
-    return [{ line: start, ch: 0 }, { line: end, ch: 0 }];
+    return [{ line: start + first, ch: 0 }, { line: end + first, ch: 0 }];
   }
 
-  window.vimOverlay.features.push({
-    name: "indent-object",
-    install(Vim) {
-      Vim.defineMotion(MOTION, indentObjectMotion);
-      // mapCommand puts these ahead of the built-in i<character>/a<character>.
-      for (const [keys, inner, below] of OBJECTS) Vim.mapCommand(keys, "motion", MOTION, { inner, below });
-    },
-  });
+  window.vimOverlay.features["indent-object"] = (Vim) => {
+    Vim.defineMotion(MOTION, indentObjectMotion);
+    // mapCommand puts these ahead of the built-in i<character>/a<character>.
+    for (const [keys, inner, below] of OBJECTS) Vim.mapCommand(keys, "motion", MOTION, { inner, below });
+  };
 })();

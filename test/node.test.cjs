@@ -14,8 +14,11 @@ const scripts = manifest.content_scripts[0].js.map((f) => [f, fs.readFileSync(pa
 const oracle = JSON.parse(fs.readFileSync(path.join(__dirname, "oracle.json"), "utf8"));
 
 function stubVim() {
-  const Vim = { motions: {}, commands: [] };
-  Vim.defineMotion = (name, fn) => (Vim.motions[name] = fn);
+  const Vim = { motions: {}, commands: [], defines: 0 };
+  Vim.defineMotion = (name, fn) => {
+    Vim.defines++;
+    Vim.motions[name] = fn;
+  };
   Vim.mapCommand = (keys, type, name, args) => Vim.commands.push({ keys, type, name, args });
   return Vim;
 }
@@ -43,12 +46,13 @@ function load({ before = () => {}, only } = {}) {
   const installs = [];
   const run = load({
     before(w) {
-      w.vimOverlay.hosts.push(
-        { name: "broken-host", find: () => { throw new Error("boom"); } },
-        { name: "fake", find: () => vims }
-      );
-      w.vimOverlay.features.unshift({ name: "broken-feature", install() { throw new Error("bad"); } });
-      w.vimOverlay.features.push({ name: "probe", install: (Vim) => installs.push(Vim) });
+      w.vimOverlay.hosts["broken-host"] = () => { throw new Error("boom"); };
+      w.vimOverlay.hosts.fake = () => vims;
+      w.vimOverlay.features = {
+        "broken-feature": () => { throw new Error("bad"); },
+        ...w.vimOverlay.features,
+        probe: (Vim) => installs.push(Vim),
+      };
     },
   });
   const { sandbox, tick, warnings } = run;
@@ -69,13 +73,18 @@ function load({ before = () => {}, only } = {}) {
   tick();
   assert.strictEqual(run.timers.length, 1, "a second copy of the scripts does not poll again");
   assert.strictEqual(a.commands.length, 4, "a second copy of the scripts does not install again");
+  assert.strictEqual(Object.keys(sandbox.vimOverlay.hosts).length, 6, "a second copy of the scripts adds no hosts");
+  const c = stubVim();
+  vims.push(c);
+  tick();
+  assert.deepStrictEqual([c.defines, c.commands.length], [1, 4], "a Vim object found after a second copy installs once");
   console.log("ok  main.js: once per Vim object, failures isolated and named, second copy is a no-op");
 }
 
 const Vim = stubVim();
 {
   const { sandbox } = load({ only: ["src/registry.js", "src/features/indent-object.js"] });
-  sandbox.vimOverlay.features[0].install(Vim);
+  sandbox.vimOverlay.features["indent-object"](Vim);
 }
 const motion = Vim.motions[Vim.commands[0].name];
 const argsFor = (obj) => ({ ...Vim.commands.find((c) => c.keys === obj).args });
@@ -86,33 +95,36 @@ function check(label, got, want) {
   if (fmt(got) !== fmt(want) && ++failures <= 10) console.log(`FAIL ${label}: got ${fmt(got)}, want ${fmt(want)}`);
 }
 
+// first: the document's first line number. A CodeMirror 5 document can start past 0.
+for (const first of [0, 7])
 for (const fx of oracle) {
   const signals = [];
   class Adapter {
     static signal(cm, type, e) {
       signals.push([type, e.subMode]);
     }
-    lastLine() { return fx.lines.length - 1; }
-    getLine(i) { return fx.lines[i]; }
+    firstLine() { return first; }
+    lastLine() { return first + fx.lines.length - 1; }
+    getLine(i) { return fx.lines[i - first]; }
     getOption(name) { return name === "tabSize" ? 4 : undefined; }
   }
   const cm = new Adapter();
   for (const c of fx.cases) {
-    const line = c.line - 1;
-    const label = (k) => `${fx.name} line ${c.line} ${k}`;
+    const line = first + c.line - 1;
+    const label = (k) => `${fx.name} first line ${first}, line ${c.line} ${k}`;
     // Operator-pending with count n: expect the plugin's n-press Visual result.
     for (const n of [1, 2, 3]) {
       const args = { ...argsFor(c.obj), repeat: n };
       const [a, h] = motion(cm, { line, ch: 0 }, args, { visualMode: false });
       assert.ok(args.linewise, "operator range is linewise");
-      check(label(`y${n}${c.obj}`), [a.line + 1, h.line + 1], c["vis" + n]);
+      check(label(`y${n}${c.obj}`), [a.line - first + 1, h.line - first + 1], c["vis" + n]);
     }
     const vim = { visualMode: true, visualLine: false, sel: { anchor: { line, ch: 0 }, head: { line, ch: 0 } } };
     signals.length = 0;
     for (const k of [1, 2, 3]) {
       const [anchor, head] = motion(cm, vim.sel.head, { ...argsFor(c.obj), repeat: 1 }, vim);
       vim.sel = { anchor, head };
-      check(label(`v${c.obj.repeat(k)}`), [anchor.line + 1, head.line + 1], c["vis" + k]);
+      check(label(`v${c.obj.repeat(k)}`), [anchor.line - first + 1, head.line - first + 1], c["vis" + k]);
     }
     assert.ok(vim.visualLine, "Visual mode switches to linewise");
     assert.deepStrictEqual(signals, [["vim-mode-change", "linewise"]], "mode change signalled once");
@@ -121,6 +133,6 @@ for (const fx of oracle) {
 const cases = oracle.reduce((s, f) => s + f.cases.length, 0);
 console.log(
   `${failures ? "FAIL" : "ok "} indent-object vs Vim oracle: ${checks - failures}/${checks} checks pass ` +
-    `(${oracle.length} buffers, ${cases} cursor/object cases)`
+    `(${oracle.length} buffers, ${cases} cursor/object cases, documents starting at line 0 and 7)`
 );
 process.exit(failures ? 1 : 0);

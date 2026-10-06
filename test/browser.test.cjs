@@ -25,7 +25,7 @@ const CONFIGS = [
   { host: "codemirror6", page: "codemirror6.html?expose=1", found: true },
   { host: "codemirror6", page: "codemirror6.html?expose=1&view=6.38.8", found: true },
   { host: "codemirror6", page: "codemirror6.html", found: false },
-  { host: "codemirror5", page: "codemirror5.html", found: true },
+  { host: "codemirror5", page: "codemirror5.html", found: true, offsetDoc: true },
   { host: "ace", page: "ace.html", found: true },
 ];
 
@@ -210,6 +210,22 @@ async function runConfig(browser, base, cfg) {
       const bad = Object.keys(expect).filter((k) => !same(got[k], expect[k]));
       check(results, `scenario: ${name}`, !bad.length, bad.map((k) => `${k}=${JSON.stringify(got[k])}`).join(" "));
     }
+  }
+  if (cfg.offsetDoc) {
+    // A CodeMirror 5 document whose first line is 10, not 0.
+    await page.evaluate(() => {
+      window.testVim.handleKey(window.cm, "<Esc>");
+      window.savedDoc = window.cm.swapDoc(CodeMirror.Doc("    a\n    b\ntail", null, 10));
+      window.cm.setCursor({ line: 10, ch: 4 });
+      window.cm.focus();
+    });
+    for (const key of "dii") await page.keyboard.press(key);
+    const text = await page.evaluate(() => {
+      const value = window.cm.getValue();
+      window.cm.swapDoc(window.savedDoc);
+      return value;
+    });
+    check(results, "dii in a document that starts at line 10", text === "tail", JSON.stringify(text));
   }
   for (const [i, [name, lines, cursor, keys]] of BUILTINS.entries()) {
     const got = await play(page, lines, cursor, keys);
