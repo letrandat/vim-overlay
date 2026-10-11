@@ -1,0 +1,71 @@
+<!doctype html>
+<!-- Monaco + monaco-vim bundled the way CodeSignal does it: monaco-vim is a module in a webpack 5
+     bundle and no global points at it. The chunk array exists before the runtime loads. -->
+<meta charset="utf-8" />
+<div id="editor" style="width: 900px; height: 500px"></div>
+<div id="status"></div>
+<script src="common.js"></script>
+<script>
+  self.webpackChunkfixture = [];
+
+  // webpack 5's JSONP chunk runtime, reduced to what a page with loaded chunks runs.
+  function installWebpackRuntime(name) {
+    const modules = {};
+    const cache = {};
+    const installed = {};
+    function webpackRequire(id) {
+      if (cache[id]) return cache[id].exports;
+      const module = (cache[id] = { exports: {} });
+      modules[id].call(module.exports, module, module.exports, webpackRequire);
+      return module.exports;
+    }
+    webpackRequire.m = modules;
+    function callback(parentPush, data) {
+      const [chunkIds, moreModules, runtime] = data;
+      if (chunkIds.some((id) => installed[id] !== 0)) {
+        Object.assign(modules, moreModules);
+        if (runtime) runtime(webpackRequire);
+      }
+      if (parentPush) parentPush(data);
+      for (const id of chunkIds) installed[id] = 0;
+    }
+    const chunks = self[name];
+    chunks.forEach(callback.bind(null, null));
+    chunks.push = callback.bind(null, chunks.push.bind(chunks));
+    return webpackRequire;
+  }
+</script>
+<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
+<script>
+  require.config({ paths: { vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs" } });
+  require(["vs/editor/editor.main"], async () => {
+    const source = await (await fetch("https://cdn.jsdelivr.net/npm/monaco-vim@0.4.4/dist/monaco-vim.umd.js")).text();
+    const webpackRequire = installWebpackRuntime("webpackChunkfixture");
+    self.webpackChunkfixture.push([
+      ["vim"],
+      {
+        "monaco-editor/esm/vs/editor/editor.api": (module) => (module.exports = monaco),
+        // The UMD build takes its CommonJS branch here, as the ESM build would in a real bundle.
+        "monaco-vim": new Function("module", "exports", "require", source),
+      },
+    ]);
+    const MonacoVim = webpackRequire("monaco-vim");
+    track(MonacoVim.VimMode.Vim);
+    let editor, adapter;
+    window.setText = (text) => editor.setValue(text);
+    window.remount = () => {
+      adapter?.dispose();
+      editor?.dispose();
+      editor = monaco.editor.create(document.getElementById("editor"), {
+        language: "python",
+        tabSize: 4,
+        insertSpaces: true,
+        detectIndentation: false,
+        minimap: { enabled: false },
+      });
+      adapter = MonacoVim.initVimMode(editor, document.getElementById("status"));
+      watch(adapter);
+    };
+    remount();
+  });
+</script>

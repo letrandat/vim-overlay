@@ -31,7 +31,7 @@ function load({ before = () => {}, only } = {}) {
   const timers = [];
   const warnings = [];
   const sandbox = {
-    document: { querySelectorAll: () => [] },
+    document: { querySelector: () => null, querySelectorAll: () => [] },
     console: { ...console, warn: (...a) => warnings.push(a.join(" ")) },
     setInterval: (fn) => timers.push(fn),
   };
@@ -78,7 +78,7 @@ function load({ before = () => {}, only } = {}) {
   tick();
   assert.strictEqual(run.timers.length, 1, "a second copy of the scripts does not poll again");
   assert.deepStrictEqual([a.commands.length, a.maps.length], [7, 1], "a second copy of the scripts does not install again");
-  assert.strictEqual(Object.keys(sandbox.vimOverlay.hosts).length, 6, "a second copy of the scripts adds no hosts");
+  assert.strictEqual(Object.keys(sandbox.vimOverlay.hosts).length, 7, "a second copy of the scripts adds no hosts");
   const c = stubVim();
   vims.push(c);
   tick();

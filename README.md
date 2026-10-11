@@ -12,6 +12,7 @@ A host finds the `Vim` objects live in the page. `src/main.js` asks every host o
 | CodeMirror 6 + @replit/codemirror-vim | `.cm-content` element, then its EditorView (`cmTile` in @codemirror/view 6.39+, `cmView` before), then `view.cm.constructor.Vim`. | **No on stock pages.** @replit/codemirror-vim 6.0 to 6.4 exports `Vim` from its module but never sets `CodeMirror.Vim`, so the adapter this host reaches through the DOM does not carry it. Tested: on a stock page the host finds nothing and built-ins are unchanged. On a page that sets `getCM(view).constructor.Vim = Vim`, the feature passes the full suite. |
 | CodeMirror 5 vim keymap | `.CodeMirror` element, then `el.CodeMirror.constructor.Vim`. | Yes: CodeMirror 5.65.21. |
 | Ace `ace/keyboard/vim` | `.ace_editor` element, then `el.env.editor.state.cm.constructor.Vim` (set when the vim keyboard attaches). | Yes: ace-builds 1.44.0. |
+| Any Vim mode bundled by webpack 5 (CodeSignal) | A `webpackChunk*` page global. The host pushes a chunk whose runtime function receives the bundle's `require`. Once an editor element exists, it requires each module whose source defines `defineMotion` and takes the `Vim` object from its exports. | Yes: monaco-vim 0.4.4 as a module in a webpack 5 chunk, with no global. Checked by hand on CodeSignal, which bundles an older monaco-vim. |
 
 ## Features
 

@@ -14,6 +14,7 @@
         "src/hosts/codemirror6.js",
         "src/hosts/codemirror5.js",
         "src/hosts/ace.js",
+        "src/hosts/webpack.js",
         "src/features/indent-object.js",
         "src/features/entire-object.js",
         "src/features/yank-to-eol.js",
