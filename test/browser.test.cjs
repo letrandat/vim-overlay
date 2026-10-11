@@ -84,6 +84,13 @@ const SCENARIOS = [
   ["Ctrl-N past the last match restores the prefix", FRESH, [1, 0], "A<C-n><C-n><C-n><Esc>", { lines: FRESH }],
   ["Ctrl-P scans backward and wraps", FRESH, [1, 0], "A<C-p><Esc>", { lines: withLine(FRESH, 1, "fresh_total") }],
   ["typing after a completion keeps it", FRESH, [1, 0], "A<C-n>!<Esc>", { lines: withLine(FRESH, 1, "fresh_count!") }],
+  ["dot repeats a completed insert", ["", "", "fresh_count"], [0, 0], "ifresh_<C-n><Esc>j.", { lines: ["fresh_count", "fresh_count", "fresh_count"] }],
+  ["dot repeats a completion and the typing after it", ["", "", "fresh_count"], [0, 0], "ifresh_<C-n>!<Esc>j.", { lines: ["fresh_count!", "fresh_count!", "fresh_count"] }],
+  ["dot repeats the last of several matches", ["", "", "fresh_count", "fresh_total"], [0, 0], "ifresh_<C-n><C-n><Esc>j.", { lines: ["fresh_total", "fresh_total", "fresh_count", "fresh_total"] }],
+  ["dot after completing an existing prefix adds the suffix", ["fresh_", "fresh_", "fresh_count"], [0, 0], "A<C-n><Esc>j.", { lines: ["fresh_count", "fresh_count", "fresh_count"] }],
+  ["a new Insert session completes the new prefix", ["fresh_", "fresh_count", "fresh_total", "fresh_count_extra"], [0, 0], "A<C-n><Esc>A<C-n><Esc>", { lines: withLine(["fresh_", "fresh_count", "fresh_total", "fresh_count_extra"], 0, "fresh_count_extra") }],
+  ["Ctrl-P takes the nearest match above when words repeat", ["fresh_total", "fresh_count", "fresh_", "fresh_count"], [2, 0], "A<C-p><Esc>", { lines: withLine(["fresh_total", "fresh_count", "fresh_", "fresh_count"], 2, "fresh_count") }],
+  ["Ctrl-N steps back through a Ctrl-P list", ["fresh_total", "fresh_count", "fresh_", "fresh_count"], [2, 0], "A<C-p><C-p><C-n><Esc>", { lines: withLine(["fresh_total", "fresh_count", "fresh_", "fresh_count"], 2, "fresh_count") }],
   ["Ctrl-N without a match changes nothing", FRESH, [0, 0], "Azz<C-n><Esc>", { lines: withLine(FRESH, 0, "fresh = 0zz") }],
 ];
 
