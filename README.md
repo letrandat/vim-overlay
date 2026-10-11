@@ -18,6 +18,10 @@ A host finds the `Vim` objects live in the page. `src/main.js` asks every host o
 | Feature | Keys | Notes |
 | --- | --- | --- |
 | `indent-object` | `ii`, `ai`, `iI`, `aI` | Port of [vim-indent-object](https://github.com/michaeljsmith/vim-indent-object). Works with operators, counts, `.`, and Visual mode, where pressing it again selects the enclosing block. A count of n acts like n presses in Visual mode, as the plugin's doc says. |
+| `entire-object` | `ae` | The whole buffer, linewise, as in [vim-textobj-entire](https://github.com/kana/vim-textobj-entire): `yae`, `dae`, `vae`. |
+| `yank-to-eol` | `Y` | Yanks to the end of the line, as in Neovim. `C` and `D` already act like `c$` and `d$` in every host. Visual-mode `Y` still yanks lines. |
+| `clipboard` | any yank | A yank into the unnamed register also goes to the system clipboard. Deletes and named registers do not. |
+| `complete` | `Ctrl-N`, `Ctrl-P` in Insert mode | Completes the word before the cursor from words in the buffer, like Vim's `i_CTRL-N`. No popup: each press puts the next match in place, and after the last the typed prefix returns. `Ctrl-N` meets matches below the cursor first, `Ctrl-P` above. `.` repeats the completed text, and `u` undoes it with the rest of the insert, except in Ace, which undoes typing one key at a time. On Windows and Linux, Chrome keeps `Ctrl-N` for a new window. |
 
 ## Install
 
@@ -31,10 +35,10 @@ After changing a file, reload the extension, then refresh the page.
 Add one file to `src/features/` and list it in `manifest.json` under `content_scripts[0].js`, before `src/main.js`. To remove a feature, delete the file and its line.
 
 ```js
-// src/features/yank-to-eol.js
-window.vimOverlay.features["yank-to-eol"] = (Vim) => {
-  // Y yanks to the end of the line, as in Neovim.
-  Vim.map("Y", "y$", "normal");
+// src/features/my-feature.js
+window.vimOverlay.features["my-feature"] = (Vim) => {
+  // Q replays the last recorded macro.
+  Vim.map("Q", "@@", "normal");
 };
 ```
 
