@@ -20,13 +20,14 @@ const SCRIPTS = JSON.parse(fs.readFileSync(path.join(ROOT, "manifest.json"), "ut
 const oracle = JSON.parse(fs.readFileSync(path.join(__dirname, "oracle.json"), "utf8"));
 
 // found: whether the host is expected to find the page's Vim object.
+// keyUndo: the host undoes typed text one key at a time, so UNDO_SCENARIOS do not apply.
 const CONFIGS = [
   { host: "monaco-vim", page: "monaco-vim.html", found: true },
   { host: "codemirror6", page: "codemirror6.html?expose=1", found: true },
   { host: "codemirror6", page: "codemirror6.html?expose=1&view=6.38.8", found: true },
   { host: "codemirror6", page: "codemirror6.html", found: false },
   { host: "codemirror5", page: "codemirror5.html", found: true, offsetDoc: true },
-  { host: "ace", page: "ace.html", found: true },
+  { host: "ace", page: "ace.html", found: true, keyUndo: true },
 ];
 
 const WITH_TAIL = [
@@ -91,7 +92,18 @@ const SCENARIOS = [
   ["a new Insert session completes the new prefix", ["fresh_", "fresh_count", "fresh_total", "fresh_count_extra"], [0, 0], "A<C-n><Esc>A<C-n><Esc>", { lines: withLine(["fresh_", "fresh_count", "fresh_total", "fresh_count_extra"], 0, "fresh_count_extra") }],
   ["Ctrl-P takes the nearest match above when words repeat", ["fresh_total", "fresh_count", "fresh_", "fresh_count"], [2, 0], "A<C-p><Esc>", { lines: withLine(["fresh_total", "fresh_count", "fresh_", "fresh_count"], 2, "fresh_count") }],
   ["Ctrl-N steps back through a Ctrl-P list", ["fresh_total", "fresh_count", "fresh_", "fresh_count"], [2, 0], "A<C-p><C-p><C-n><Esc>", { lines: withLine(["fresh_total", "fresh_count", "fresh_", "fresh_count"], 2, "fresh_count") }],
+  ["moving the cursor ends the completion; dot repeats what came after", ["", "", "fresh_count", "fresh_countdown"], [0, 0], "ifresh_<C-n><Left><Right><C-n><Esc>j.", { lines: ["fresh_countdown", "down", "fresh_count", "fresh_countdown"] }],
+  ["u after completing an existing prefix undoes the completion", ["fresh_", "fresh_count"], [0, 0], "A<C-n><Esc>u", { lines: ["fresh_", "fresh_count"] }],
   ["Ctrl-N without a match changes nothing", FRESH, [0, 0], "Azz<C-n><Esc>", { lines: withLine(FRESH, 0, "fresh = 0zz") }],
+];
+
+// Undo after Insert mode with completion, where the host undoes a typed insert as one step.
+const UNDO_LINES = ["", "fresh_count", "fresh_total"];
+const UNDO_SCENARIOS = [
+  ["u undoes an insert with a completion", UNDO_LINES, [0, 0], "ifresh_<C-n><Esc>u", { lines: UNDO_LINES }],
+  ["u undoes an insert with cycled completions", UNDO_LINES, [0, 0], "ifresh_<C-n><C-n><Esc>u", { lines: UNDO_LINES }],
+  ["u undoes typing after a completion with it", UNDO_LINES, [0, 0], "ifresh_<C-n>!<Esc>u", { lines: UNDO_LINES }],
+  ["Ctrl-R redoes the whole insert", UNDO_LINES, [0, 0], "ifresh_<C-n>!<Esc>u<C-r>", { lines: withLine(UNDO_LINES, 0, "fresh_count!") }],
 ];
 
 // Run with and without the extension; results must be identical. [name, lines, cursor, keys]
@@ -147,7 +159,7 @@ async function openPage(browser, url, withExtension) {
 
 // Hold Shift for shifted characters, as a real keyboard does. Ace's vim maps
 // keys by keyCode and misreads an unshifted ">" after "." as another ".".
-const KEYS = { "<Esc>": "Escape", "<C-n>": "Control+KeyN", "<C-p>": "Control+KeyP", ">": "Shift+Period", "<": "Shift+Comma", "(": "Shift+Digit9", '"': "Shift+Quote" };
+const KEYS = { "<Esc>": "Escape", "<C-n>": "Control+KeyN", "<C-p>": "Control+KeyP", "<C-r>": "Control+KeyR", "<Left>": "ArrowLeft", "<Right>": "ArrowRight", ">": "Shift+Period", "<": "Shift+Comma", "(": "Shift+Digit9", '"': "Shift+Quote" };
 for (const c of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") KEYS[c] = "Shift+Key" + c;
 
 async function play(page, lines, [line, ch], keys) {
@@ -246,7 +258,7 @@ async function runConfig(browser, base, cfg) {
   check(results, cfg.found ? "features installed" : "host finds nothing", same(calls, cfg.found ? ONCE : { defineMotion: 0, defineAction: 0, mapCommand: 0, map: 0 }), JSON.stringify(calls));
 
   if (cfg.found) {
-    for (const [name, lines, cursor, keys, expect] of SCENARIOS) {
+    for (const [name, lines, cursor, keys, expect] of cfg.keyUndo ? SCENARIOS : [...SCENARIOS, ...UNDO_SCENARIOS]) {
       const got = await play(page, lines, cursor, keys);
       const bad = Object.keys(expect).filter((k) => !same(got[k], expect[k]));
       check(results, `scenario: ${name}`, !bad.length, bad.map((k) => `${k}=${JSON.stringify(got[k])}`).join(" "));
