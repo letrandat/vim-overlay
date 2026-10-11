@@ -2,7 +2,8 @@
 // Webpack keeps loaded chunks in a page global, webpackChunk<name>. Pushing a chunk with a runtime
 // function hands back each runtime's require. The host reads Vim from modules the page has already
 // run and does not run an unrun module's factory: a module run early can throw and leave the page a
-// broken copy. Reading a Proxy export still runs its traps, which can load other modules early.
+// broken copy. Reading a Proxy export still runs its traps, which can load other modules early, and so
+// can a getter written inside a `with` block, which no check here can tell from a module variable.
 (() => {
   const pushed = new WeakSet(); // chunk arrays this copy of the script has pushed into
   // require -> { chunks, walked: walk key at the last walk, seen: Map of module id -> factory, candidates: Set of ids, vims }
@@ -14,7 +15,7 @@
   const MISS = Symbol("vim-overlay probe");
   // The getter webpack defines for a module's own export, `() => (x)` or `function () { return x; }`,
   // only returns a variable local to the module. Other getters, including re-exports such as
-  // `() => (other.x)` and a variable that is really a global with a getter, may run page code.
+  // `() => (other.x)` and a name that is really a global defined by a getter, may run page code.
   const ID = String.raw`[\p{ID_Start}$_][\p{ID_Continue}$\u200c\u200d]*`;
   const BINDING = new RegExp(String.raw`^(?:\(\)\s*=>\s*\(?\s*(${ID})\s*\)?|function\s*(?:${ID})?\s*\(\)\s*\{\s*return\s+(${ID});?\s*\})$`, "u");
 
@@ -41,9 +42,18 @@
       const source = d.get && Function.prototype.toString.call(d.get).replace(/\/\*.*?\*\//g, "").trim();
       const m = source && BINDING.exec(source);
       const name = m && (m[1] ?? m[2]);
-      // `in` reads no getter. A module variable that shares a global's name is skipped too.
-      return name && !(name in globalThis) ? d.get.call(obj) : undefined;
+      return name && !globalAccessor(name) ? d.get.call(obj) : undefined;
     }
+  }
+
+  // Whether a global named `name` is defined by a getter. The window and its prototypes are not
+  // proxies and their prototypes cannot change, so reading their descriptors runs no page code.
+  function globalAccessor(name) {
+    for (let o = globalThis; o !== null; o = Object.getPrototypeOf(o)) {
+      const d = Object.getOwnPropertyDescriptor(o, name);
+      if (d) return !("value" in d);
+    }
+    return false;
   }
 
   const isVim = (v) => typeof read(v, "defineMotion") === "function" && typeof read(v, "mapCommand") === "function";

@@ -89,6 +89,8 @@ function load({ before = () => {}, only } = {}) {
 {
   // The webpack host with webpack 5's runtime finds Vim in a module the page has run, and runs no
   // page code for it: not a module the page has not run, nor a re-export's or a global's getter.
+  // A Proxy export whose ownKeys trap throws does not stop it, nor does a page global that shares
+  // the name of the module variable holding Vim.
   const { sandbox } = load({ only: ["src/registry.js", "src/hosts/webpack.js"] });
   sandbox.document.querySelector = () => ({}); // an editor is on the page
   sandbox.self = sandbox;
@@ -116,15 +118,22 @@ function load({ before = () => {}, only } = {}) {
     chunks.push = callback.bind(null, chunks.push.bind(chunks));
     window.pageRequire = require;
     Object.defineProperty(globalThis, "optional", { get() { ran.push("global getter"); } });
+    globalThis.$ = "a page global with the name of a minified module variable";
     chunks.push([["main"], {
+      proxy(module) {
+        module.exports = new Proxy({}, { ownKeys() { throw new Error("trap"); } });
+        const unused = { defineMotion() {} };
+      },
       vim(module, exports, require) {
         ran.push("vim");
         const dep = require("dep");
-        const api = { defineMotion() {}, mapCommand() {} };
-        Object.defineProperty(exports, "a", { enumerable: true, get: () => api });
+        const $ = { defineMotion() {}, mapCommand() {} };
+        Object.defineProperty(exports, "a", { enumerable: true, get: () => $ });
         Object.defineProperty(exports, "b", { enumerable: true, get: () => dep.value });
         Object.defineProperty(exports, "c", { enumerable: true, get: () => optional });
-        Object.defineProperty(exports, "d", { enumerable: true, get() { throw new Error("not ready"); } });
+        Object.defineProperty(exports, "d", { enumerable: true, get: () => pending });
+        return;
+        let pending; // read before initialization: the getter throws
       },
       dep(module, exports) {
         ran.push("dep");
@@ -140,6 +149,7 @@ function load({ before = () => {}, only } = {}) {
   const host = sandbox.vimOverlay.hosts.webpack;
   host();
   assert.deepStrictEqual(sandbox.ran, [], "runs no module the page has not run");
+  sandbox.pageRequire("proxy");
   const vimExports = sandbox.pageRequire("vim");
   let found = [host(), host()][1];
   assert.deepStrictEqual(sandbox.ran, ["vim", "dep"], "calls no re-export getter, global getter or unrun module");
