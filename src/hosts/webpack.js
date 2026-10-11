@@ -1,8 +1,8 @@
 // Some pages bundle their Vim mode with webpack 5 and set no global (CodeSignal bundles monaco-vim).
 // Webpack keeps loaded chunks in a page global, webpackChunk<name>. Pushing a chunk with a runtime
 // function hands back each runtime's require. The host reads Vim from modules the page has already
-// run and never runs a module itself: a module run early can throw and leave the page a broken copy.
-// Reading exports calls only the getters webpack writes; a Proxy export's traps still run.
+// run and does not run an unrun module's factory: a module run early can throw and leave the page a
+// broken copy. Reading a Proxy export still runs its traps, which can load other modules early.
 (() => {
   const pushed = new WeakSet(); // chunk arrays this copy of the script has pushed into
   // require -> { chunks, walked: walk key at the last walk, seen: Map of module id -> factory, candidates: Set of ids, vims }
@@ -13,10 +13,10 @@
   const DEFINES_VIM = /[{,](?:\s|\\[nrt])*defineMotion(?:\s|\\[nrt])*[:(,}]/;
   const MISS = Symbol("vim-overlay probe");
   // The getter webpack defines for a module's own export, `() => (x)` or `function () { return x; }`,
-  // only returns a variable. Other getters, including re-exports such as `() => (other.x)`, may run
-  // page code.
+  // only returns a variable local to the module. Other getters, including re-exports such as
+  // `() => (other.x)` and a variable that is really a global with a getter, may run page code.
   const ID = String.raw`[\p{ID_Start}$_][\p{ID_Continue}$\u200c\u200d]*`;
-  const BINDING = new RegExp(String.raw`^(?:\(\)\s*=>\s*\(?\s*${ID}\s*\)?|function\s*(?:${ID})?\s*\(\)\s*\{\s*return\s+${ID};?\s*\})$`, "u");
+  const BINDING = new RegExp(String.raw`^(?:\(\)\s*=>\s*\(?\s*(${ID})\s*\)?|function\s*(?:${ID})?\s*\(\)\s*\{\s*return\s+(${ID});?\s*\})$`, "u");
 
   // A module's exports if the page has run it, else undefined. Webpack's require turns the id into
   // a property key at each use. This id gives the real key to the cache lookup only; after a miss,
@@ -39,7 +39,10 @@
       if (!d) continue;
       if ("value" in d) return d.value;
       const source = d.get && Function.prototype.toString.call(d.get).replace(/\/\*.*?\*\//g, "").trim();
-      return source && BINDING.test(source) ? d.get.call(obj) : undefined;
+      const m = source && BINDING.exec(source);
+      const name = m && (m[1] ?? m[2]);
+      // `in` reads no getter. A module variable that shares a global's name is skipped too.
+      return name && !(name in globalThis) ? d.get.call(obj) : undefined;
     }
   }
 
@@ -48,7 +51,11 @@
   function vimsIn(exports) {
     const values = [exports];
     // Every export: production builds shorten export names, so Vim may be under any of them.
-    for (const key of Object.keys(Object(exports))) {
+    let keys = [];
+    try {
+      keys = Object.keys(Object(exports));
+    } catch {} // a Proxy's ownKeys trap threw
+    for (const key of keys) {
       try {
         values.push(read(exports, key));
       } catch {} // a binding not yet initialized

@@ -86,6 +86,70 @@ function load({ before = () => {}, only } = {}) {
   console.log("ok  main.js: once per Vim object, failures isolated and named, second copy is a no-op");
 }
 
+{
+  // The webpack host with webpack 5's runtime finds Vim in a module the page has run, and runs no
+  // page code for it: not a module the page has not run, nor a re-export's or a global's getter.
+  const { sandbox } = load({ only: ["src/registry.js", "src/hosts/webpack.js"] });
+  sandbox.document.querySelector = () => ({}); // an editor is on the page
+  sandbox.self = sandbox;
+  sandbox.ran = [];
+  vm.runInContext(
+    `const modules = {}, cache = {}, installed = {};
+    function require(id) {
+      const cached = cache[id];
+      if (cached !== undefined) return cached.exports;
+      const module = (cache[id] = { id, loaded: false, exports: {} });
+      modules[id].call(module.exports, module, module.exports, require);
+      module.loaded = true;
+      return module.exports;
+    }
+    require.m = modules;
+    function callback(parentPush, [chunkIds, more, runtime]) {
+      if (chunkIds.some((id) => installed[id] !== 0)) {
+        Object.assign(modules, more);
+        if (runtime) runtime(require);
+      }
+      if (parentPush) parentPush([chunkIds, more, runtime]);
+      for (const id of chunkIds) installed[id] = 0;
+    }
+    const chunks = (self.webpackChunktest = []);
+    chunks.push = callback.bind(null, chunks.push.bind(chunks));
+    window.pageRequire = require;
+    Object.defineProperty(globalThis, "optional", { get() { ran.push("global getter"); } });
+    chunks.push([["main"], {
+      vim(module, exports, require) {
+        ran.push("vim");
+        const dep = require("dep");
+        const api = { defineMotion() {}, mapCommand() {} };
+        Object.defineProperty(exports, "a", { enumerable: true, get: () => api });
+        Object.defineProperty(exports, "b", { enumerable: true, get: () => dep.value });
+        Object.defineProperty(exports, "c", { enumerable: true, get: () => optional });
+        Object.defineProperty(exports, "d", { enumerable: true, get() { throw new Error("not ready"); } });
+      },
+      dep(module, exports) {
+        ran.push("dep");
+        Object.defineProperty(exports, "value", { enumerable: true, get() { ran.push("dep getter"); } });
+      },
+      later(module, exports) {
+        ran.push("later");
+        exports.Vim = { defineMotion() {}, mapCommand() {} };
+      },
+    }]);`,
+    sandbox
+  );
+  const host = sandbox.vimOverlay.hosts.webpack;
+  host();
+  assert.deepStrictEqual(sandbox.ran, [], "runs no module the page has not run");
+  const vimExports = sandbox.pageRequire("vim");
+  let found = [host(), host()][1];
+  assert.deepStrictEqual(sandbox.ran, ["vim", "dep"], "calls no re-export getter, global getter or unrun module");
+  assert.ok(found.length === 1 && found[0] === vimExports.a, "finds Vim under a shortened export name");
+  sandbox.pageRequire("later");
+  found = host();
+  assert.ok(found.length === 2 && found[1] === sandbox.pageRequire("later").Vim, "finds a module once the page runs it");
+  console.log("ok  webpack host: finds Vim in modules the page ran; runs no module, re-export or global getter");
+}
+
 const Vim = stubVim();
 {
   const { sandbox } = load({ only: ["src/registry.js", "src/features/indent-object.js"] });
