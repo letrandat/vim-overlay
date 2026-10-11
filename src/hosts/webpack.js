@@ -1,19 +1,22 @@
 // Some pages bundle their Vim mode with webpack 5 and set no global (CodeSignal bundles monaco-vim).
 // Webpack keeps loaded chunks in a page global, webpackChunk<name>. Pushing a chunk with a runtime
 // function hands back each runtime's require. The host reads Vim from modules the page has already
-// run and never runs page code itself: a module run early can throw and leave the page a broken copy.
+// run and never runs a module itself: a module run early can throw and leave the page a broken copy.
+// Reading exports calls only the getters webpack writes; a Proxy export's traps still run.
 (() => {
   const pushed = new WeakSet(); // chunk arrays this copy of the script has pushed into
-  // require -> { chunks, walked: chunks.length at the last walk, seen: Set of module ids, candidates: Set of ids, vims }
+  // require -> { chunks, walked: walk key at the last walk, seen: Map of module id -> factory, candidates: Set of ids, vims }
   const runtimes = new Map();
   const EDITOR = ".monaco-editor, .cm-editor, .CodeMirror, .ace_editor";
   // Where vim.js builds its API object. Most modules that only use the API do not match. Development
   // builds wrap each module in an eval string, where line breaks are the two characters \n.
   const DEFINES_VIM = /[{,](?:\s|\\[nrt])*defineMotion(?:\s|\\[nrt])*[:(,}]/;
   const MISS = Symbol("vim-overlay probe");
-  // The getter webpack defines for an ES module export, such as `() => (x)` or
-  // `function () { return x["default"]; }`, only returns a binding. Other getters may run page code.
-  const BINDING = /^(?:\(\)\s*=>\s*\(?\s*[\w$.[\]"']+\s*\)?|function\s*\w*\s*\(\)\s*\{\s*return\s+[\w$.[\]"']+;?\s*\})$/;
+  // The getter webpack defines for a module's own export, `() => (x)` or `function () { return x; }`,
+  // only returns a variable. Other getters, including re-exports such as `() => (other.x)`, may run
+  // page code.
+  const ID = String.raw`[\p{ID_Start}$_][\p{ID_Continue}$\u200c\u200d]*`;
+  const BINDING = new RegExp(String.raw`^(?:\(\)\s*=>\s*\(?\s*${ID}\s*\)?|function\s*(?:${ID})?\s*\(\)\s*\{\s*return\s+${ID};?\s*\})$`, "u");
 
   // A module's exports if the page has run it, else undefined. Webpack's require turns the id into
   // a property key at each use. This id gives the real key to the cache lookup only; after a miss,
@@ -74,20 +77,23 @@
       // The id is new each time: a runtime skips a chunk whose ids it has installed.
       chunks.push([[Symbol("vim-overlay")], {}, (require) => {
         if (!runtimes.has(require))
-          runtimes.set(require, { chunks, walked: -1, seen: new Set(), candidates: new Set(), vims: [] });
+          runtimes.set(require, { chunks, walked: null, seen: new Map(), candidates: new Set(), vims: [] });
       }]);
     }
     const found = [];
-    // Walking a large bundle's modules costs milliseconds, so walk only where a Vim mode can be,
-    // and only after a chunk has loaded: the runtime pushes each chunk it installs to its array.
+    // Walking a large bundle's modules costs tens of milliseconds, so walk only where a Vim mode can
+    // be, and only after modules change: the runtime pushes each chunk it installs to its array, and
+    // a hot update, which adds and replaces modules without a chunk, changes the full hash, h().
     const editor = document.querySelector(EDITOR);
     for (const [require, runtime] of runtimes) {
-      if (editor && runtime.walked !== runtime.chunks.length) {
-        runtime.walked = runtime.chunks.length;
-        for (const id of Object.keys(require.m)) {
-          if (runtime.seen.has(id)) continue;
-          runtime.seen.add(id);
-          if (DEFINES_VIM.test(require.m[id])) runtime.candidates.add(id);
+      const key = `${runtime.chunks.length}:${require.h?.() ?? ""}`;
+      if (editor && runtime.walked !== key) {
+        runtime.walked = key;
+        for (const [id, factory] of Object.entries(require.m)) {
+          if (runtime.seen.get(id) === factory) continue;
+          runtime.seen.set(id, factory);
+          if (DEFINES_VIM.test(factory)) runtime.candidates.add(id);
+          else runtime.candidates.delete(id);
         }
       }
       // Asked every poll: a module may run later, or run again after a hot update.

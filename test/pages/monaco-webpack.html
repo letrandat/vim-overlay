@@ -55,8 +55,9 @@
     const vimModule = params.has("mangle")
       ? new Function("module", "exports", "require", `const inner = { exports: {} };
           (function (module, exports, require) {\n${source}\n})(inner, inner.exports, require);
-          Object.defineProperty(exports, "F", { enumerable: true, get: () => inner.exports.VimMode });
-          Object.defineProperty(exports, "P", { enumerable: true, get: () => inner.exports.initVimMode });`)
+          const { VimMode, initVimMode } = inner.exports;
+          Object.defineProperty(exports, "F", { enumerable: true, get: () => VimMode });
+          Object.defineProperty(exports, "P", { enumerable: true, get: () => initVimMode });`)
       : new Function("module", "exports", "require", source);
     const vimChunk = [["vim"], { "monaco-vim": vimModule }];
     if (params.has("delay")) {
