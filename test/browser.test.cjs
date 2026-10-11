@@ -257,6 +257,13 @@ async function runConfig(browser, base, cfg) {
   const calls = await installed(page);
   check(results, cfg.found ? "features installed" : "host finds nothing", same(calls, cfg.found ? ONCE : { defineMotion: 0, defineAction: 0, mapCommand: 0, map: 0 }), JSON.stringify(calls));
 
+  if (cfg.found && cfg.host === "monaco-vim") {
+    // Before the scenarios: text they type opens Monaco's own suggest widget.
+    await play(page, ["fresh_", "fresh_count", "fresh_countdown"], [0, 0], "A<C-n>");
+    await page.waitForTimeout(500);
+    const popup = await page.locator(".suggest-widget.visible").count();
+    check(results, "Ctrl-N opens no Monaco suggest widget", popup === 0, `${popup} visible`);
+  }
   if (cfg.found) {
     for (const [name, lines, cursor, keys, expect] of cfg.keyUndo ? SCENARIOS : [...SCENARIOS, ...UNDO_SCENARIOS]) {
       const got = await play(page, lines, cursor, keys);
@@ -279,6 +286,14 @@ async function runConfig(browser, base, cfg) {
       return value;
     });
     check(results, "dii in a document that starts at line 10", text === "tail", JSON.stringify(text));
+  }
+  if (cfg.found && cfg.host === "codemirror6") {
+    await play(page, ["fresh_", "fresh_count"], [0, 0], "A");
+    await page.evaluate(() => window.setReadOnly(true));
+    await page.keyboard.press(KEYS["<C-n>"]);
+    const line = await page.evaluate(() => window.cm.getLine(0));
+    await page.evaluate(() => window.setReadOnly(false));
+    check(results, "Ctrl-N leaves a read-only buffer alone", line === "fresh_", JSON.stringify(line));
   }
   for (const [i, [name, lines, cursor, keys]] of BUILTINS.entries()) {
     const got = await play(page, lines, cursor, keys);

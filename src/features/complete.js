@@ -34,9 +34,10 @@
         userEvent: "input.type",
       });
     } else if (cm.editor?.trigger) {
-      // Monaco groups its own typing command; edits from other sources get their own undo stop.
+      // Monaco groups its own typing command; edits from other sources get their own
+      // undo stop. A source other than "keyboard" keeps the suggest widget closed.
       cm.editor.setSelection({ startLineNumber: line + 1, startColumn: from + 1, endLineNumber: line + 1, endColumn: to + 1 });
-      cm.editor.trigger("keyboard", "type", { text });
+      cm.editor.trigger("vim", "type", { text });
     } else {
       cm.replaceRange(text, { line, ch: from }, { line, ch: to }, "+input"); // CodeMirror 5 groups "+input" edits
       cm.setCursor({ line, ch: from + text.length });
@@ -44,6 +45,7 @@
   }
 
   function complete(Vim, cm, forward) {
+    if (cm.cm6?.state.readOnly) return; // type() skips the CodeMirror 6 adapter, which has this check
     const cur = cm.getCursor();
     const text = cm.getLine(cur.line);
     const lastInsert = Vim.getVimGlobalState_().macroModeState.lastInsertModeChanges;
