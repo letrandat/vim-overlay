@@ -1,0 +1,91 @@
+<!doctype html>
+<!-- Monaco + monaco-vim bundled the way CodeSignal does it: monaco-vim is a module in a webpack 5
+     bundle and no global points at it. The chunk array exists before the runtime loads.
+     ?delay=1: a plain editor is on the page, and the monaco-vim chunk arrives before the module it
+     imports; the page runs it later.
+     ?runtimes=2: two runtimes share the chunk array; the page uses the second.
+     ?mangle=1: monaco-vim's export is a getter under a shortened name, as production builds emit. -->
+<meta charset="utf-8" />
+<div id="editor" style="width: 900px; height: 500px"></div>
+<div id="status"></div>
+<div id="plain" style="width: 900px; height: 100px"></div>
+<script src="common.js"></script>
+<script>
+  self.webpackChunkfixture = [];
+
+  // webpack 5's JSONP chunk runtime, reduced to what a page with loaded chunks runs.
+  function installWebpackRuntime(name) {
+    const modules = {};
+    const cache = {};
+    const installed = {};
+    function webpackRequire(id) {
+      const cached = cache[id];
+      if (cached !== undefined) return cached.exports;
+      const module = (cache[id] = { id, loaded: false, exports: {} });
+      modules[id].call(module.exports, module, module.exports, webpackRequire);
+      module.loaded = true;
+      return module.exports;
+    }
+    webpackRequire.m = modules;
+    function callback(parentPush, data) {
+      const [chunkIds, moreModules, runtime] = data;
+      if (chunkIds.some((id) => installed[id] !== 0)) {
+        Object.assign(modules, moreModules);
+        if (runtime) runtime(webpackRequire);
+      }
+      if (parentPush) parentPush(data);
+      for (const id of chunkIds) installed[id] = 0;
+    }
+    const chunks = self[name];
+    chunks.forEach(callback.bind(null, null));
+    chunks.push = callback.bind(null, chunks.push.bind(chunks));
+    return webpackRequire;
+  }
+</script>
+<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
+<script>
+  require.config({ paths: { vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs" } });
+  require(["vs/editor/editor.main"], async () => {
+    const params = new URLSearchParams(location.search);
+    const source = await (await fetch("https://cdn.jsdelivr.net/npm/monaco-vim@0.4.4/dist/monaco-vim.umd.js")).text();
+    let webpackRequire;
+    for (let i = 0; i < Number(params.get("runtimes") ?? 1); i++) webpackRequire = installWebpackRuntime("webpackChunkfixture");
+    const editorChunk = [["editor"], { "monaco-editor/esm/vs/editor/editor.api": (module) => (module.exports = monaco) }];
+    // The UMD build takes its CommonJS branch here, as the ESM build would in a real bundle.
+    const vimModule = params.has("mangle")
+      ? new Function("module", "exports", "require", `const inner = { exports: {} };
+          (function (module, exports, require) {\n${source}\n})(inner, inner.exports, require);
+          const { VimMode, initVimMode } = inner.exports;
+          Object.defineProperty(exports, "F", { enumerable: true, get: () => VimMode });
+          Object.defineProperty(exports, "P", { enumerable: true, get: () => initVimMode });`)
+      : new Function("module", "exports", "require", source);
+    const vimChunk = [["vim"], { "monaco-vim": vimModule }];
+    if (params.has("delay")) {
+      monaco.editor.create(document.getElementById("plain"), { value: "no vim here" });
+      // Long enough for the extension to poll while monaco-vim cannot run yet.
+      self.webpackChunkfixture.push(vimChunk);
+      await new Promise((resolve) => setTimeout(resolve, 2500));
+    }
+    self.webpackChunkfixture.push(editorChunk);
+    self.webpackChunkfixture.push(vimChunk);
+    const vimExports = webpackRequire("monaco-vim");
+    const MonacoVim = params.has("mangle") ? { VimMode: vimExports.F, initVimMode: vimExports.P } : vimExports;
+    track(MonacoVim.VimMode.Vim);
+    let editor, adapter;
+    window.setText = (text) => editor.setValue(text);
+    window.remount = () => {
+      adapter?.dispose();
+      editor?.dispose();
+      editor = monaco.editor.create(document.getElementById("editor"), {
+        language: "python",
+        tabSize: 4,
+        insertSpaces: true,
+        detectIndentation: false,
+        minimap: { enabled: false },
+      });
+      adapter = MonacoVim.initVimMode(editor, document.getElementById("status"));
+      watch(adapter);
+    };
+    remount();
+  });
+</script>

@@ -28,6 +28,8 @@ const CONFIGS = [
   { host: "codemirror6", page: "codemirror6.html", found: false },
   { host: "codemirror5", page: "codemirror5.html", found: true, offsetDoc: true },
   { host: "ace", page: "ace.html", found: true, keyUndo: true },
+  { host: "webpack", page: "monaco-webpack.html", found: true },
+  { host: "webpack", page: "monaco-webpack.html?delay=1&runtimes=2&mangle=1", found: true },
 ];
 
 const WITH_TAIL = [
@@ -257,7 +259,7 @@ async function runConfig(browser, base, cfg) {
   const calls = await installed(page);
   check(results, cfg.found ? "features installed" : "host finds nothing", same(calls, cfg.found ? ONCE : { defineMotion: 0, defineAction: 0, mapCommand: 0, map: 0 }), JSON.stringify(calls));
 
-  if (cfg.found && cfg.host === "monaco-vim") {
+  if (cfg.found && cfg.page.startsWith("monaco")) {
     // Before the scenarios: text they type opens Monaco's own suggest widget.
     await play(page, ["fresh_", "fresh_count", "fresh_countdown"], [0, 0], "A<C-n>");
     await page.waitForTimeout(500);
