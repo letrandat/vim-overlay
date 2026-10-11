@@ -44,6 +44,8 @@ const WITH_TAIL = [
 const keep = (lines, ...idx) => idx.map((i) => lines[i]);
 const ENDIF = oracle.find((f) => f.name === "vim-endif").lines;
 const BLANKS = oracle.find((f) => f.name === "blank-lines-inside-blocks").lines;
+const FRESH = ["fresh = 0", "fresh_", "fresh_count += 1", "x = fresh_total"];
+const withLine = (lines, i, text) => lines.map((l, j) => (j === i ? text : l));
 
 // [name, lines, cursor, keys, expect]
 const SCENARIOS = [
@@ -65,6 +67,24 @@ const SCENARIOS = [
   ["vii leaves the cursor on the bottom line; j extends", WITH_TAIL, [3, 8], "viij", { selection: [3, 7] }],
   ["Vai then d", WITH_TAIL, [3, 8], "Vaid", { lines: keep(WITH_TAIL, 0, 1, 7, 8, 9) }],
   ["vaI selects the endif too", ENDIF, [1, 3], "vaI", { selection: [0, 3] }],
+  ["Y yanks to the end of the line", WITH_TAIL, [1, 4], "Y", { lines: WITH_TAIL, cursor: [1, 4], register: ["total = 0", false] }],
+  ["2Y yanks to the end of the next line", WITH_TAIL, [1, 4], "2Y", { register: ["total = 0\n    for x in nums:", false] }],
+  ["Y then $p pastes characterwise", WITH_TAIL, [1, 10], "Y$p", { lines: WITH_TAIL.map((l, i) => (i === 1 ? l + "= 0" : l)) }],
+  ["D deletes to the end of the line", WITH_TAIL, [1, 10], "D", { lines: WITH_TAIL.map((l, i) => (i === 1 ? "    total " : l)), register: ["= 0", false] }],
+  ["C changes to the end of the line", WITH_TAIL, [1, 10], "Cx<Esc>", { lines: WITH_TAIL.map((l, i) => (i === 1 ? "    total x" : l)) }],
+  ["yae yanks the whole buffer linewise", WITH_TAIL, [4, 12], "yae", { lines: WITH_TAIL, register: [WITH_TAIL.join("\n") + "\n", true] }],
+  ["dae empties the buffer", WITH_TAIL, [4, 12], "dae", { lines: [""] }],
+  ["vae selects every line", WITH_TAIL, [4, 12], "vae", { selection: [0, 9], mode: "visual-line", lastMode: "visual/linewise" }],
+  ["yae copies the buffer to the clipboard", WITH_TAIL, [4, 12], "yae", { clipboard: WITH_TAIL.join("\n") + "\n" }],
+  ["Y copies to the clipboard", WITH_TAIL, [1, 4], "Y", { clipboard: "total = 0" }],
+  ["a named-register yank leaves the clipboard alone", WITH_TAIL, [1, 4], '"ayy', { clipboard: null }],
+  ["dd leaves the clipboard alone", WITH_TAIL, [1, 4], "dd", { clipboard: null }],
+  ["Ctrl-N completes the nearest match below", FRESH, [1, 0], "A<C-n><Esc>", { lines: withLine(FRESH, 1, "fresh_count"), mode: "normal" }],
+  ["Ctrl-N again takes the next match", FRESH, [1, 0], "A<C-n><C-n><Esc>", { lines: withLine(FRESH, 1, "fresh_total") }],
+  ["Ctrl-N past the last match restores the prefix", FRESH, [1, 0], "A<C-n><C-n><C-n><Esc>", { lines: FRESH }],
+  ["Ctrl-P scans backward and wraps", FRESH, [1, 0], "A<C-p><Esc>", { lines: withLine(FRESH, 1, "fresh_total") }],
+  ["typing after a completion keeps it", FRESH, [1, 0], "A<C-n>!<Esc>", { lines: withLine(FRESH, 1, "fresh_count!") }],
+  ["Ctrl-N without a match changes nothing", FRESH, [0, 0], "Azz<C-n><Esc>", { lines: withLine(FRESH, 0, "fresh = 0zz") }],
 ];
 
 // Run with and without the extension; results must be identical. [name, lines, cursor, keys]
@@ -86,6 +106,9 @@ const BUILTINS = [
   ["vipd", ONE, [2, 4], "vipd"],
   ["di then Esc then x", ONE, [1, 4], "di<Esc>x"],
   ["dd, >>, cc", ONE, [1, 4], "dd>>ccnew<Esc>"],
+  ["yy", ONE, [1, 4], "yy"],
+  ["Visual Y yanks lines", ONE, [1, 4], "vjY"],
+  ["2D", ONE, [1, 4], "2D"],
 ];
 
 function serve() {
@@ -100,6 +123,12 @@ function serve() {
 
 async function openPage(browser, url, withExtension) {
   const context = await browser.newContext();
+  await context.addInitScript(() => {
+    // Records writes instead of touching the machine's clipboard.
+    const clipboard = navigator.clipboard ?? {};
+    clipboard.writeText = async (text) => (window.clipboardText = text);
+    if (!navigator.clipboard) Object.defineProperty(navigator, "clipboard", { value: clipboard });
+  });
   if (withExtension) for (const file of SCRIPTS) await context.addInitScript({ path: file });
   const page = await context.newPage();
   // Monaco rejects pending work with "Canceled" when an editor is disposed.
@@ -111,7 +140,7 @@ async function openPage(browser, url, withExtension) {
 
 // Hold Shift for shifted characters, as a real keyboard does. Ace's vim maps
 // keys by keyCode and misreads an unshifted ">" after "." as another ".".
-const KEYS = { "<Esc>": "Escape", ">": "Shift+Period", "<": "Shift+Comma", "(": "Shift+Digit9", '"': "Shift+Quote" };
+const KEYS = { "<Esc>": "Escape", "<C-n>": "Control+KeyN", "<C-p>": "Control+KeyP", ">": "Shift+Period", "<": "Shift+Comma", "(": "Shift+Digit9", '"': "Shift+Quote" };
 for (const c of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") KEYS[c] = "Shift+Key" + c;
 
 async function play(page, lines, [line, ch], keys) {
@@ -122,20 +151,25 @@ async function play(page, lines, [line, ch], keys) {
       window.cm.setCursor({ line, ch });
       window.cm.focus();
       window.lastMode = null;
+      window.testVim.getRegisterController().unnamedRegister.setText("");
+      window.clipboardText = null;
     },
     { text: lines.join("\n"), line, ch }
   );
-  for (const key of keys.match(/<Esc>|./g)) await page.keyboard.press(KEYS[key] || key);
+  for (const key of keys.match(/<[A-Za-z-]+>|./g)) await page.keyboard.press(KEYS[key] || key);
   return page.evaluate(() => {
     const { cm } = window;
     const vim = cm.state.vim;
     const pos = cm.getCursor();
+    const register = window.testVim.getRegisterController().unnamedRegister;
     return {
       lines: Array.from({ length: cm.lastLine() + 1 }, (_, i) => cm.getLine(i)),
       cursor: [pos.line, pos.ch],
       mode: vim.insertMode ? "insert" : vim.visualMode ? (vim.visualLine ? "visual-line" : "visual") : "normal",
       selection: vim.visualMode ? [vim.sel.anchor.line, vim.sel.head.line].sort((a, b) => a - b) : null,
       lastMode: window.lastMode,
+      register: [register.toString(), !!register.linewise],
+      clipboard: window.clipboardText,
     };
   });
 }
@@ -187,7 +221,7 @@ function check(results, name, ok, detail) {
 }
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const installed = (page) => page.evaluate(() => window.calls);
-const ONCE = { defineMotion: 1, mapCommand: 4 };
+const ONCE = { defineMotion: 2, defineAction: 1, mapCommand: 7, map: 1 };
 
 async function runConfig(browser, base, cfg) {
   const results = [];
@@ -202,7 +236,7 @@ async function runConfig(browser, base, cfg) {
   const page = await openPage(browser, url, true);
   await page.waitForTimeout(2500);
   const calls = await installed(page);
-  check(results, cfg.found ? "features installed" : "host finds nothing", same(calls, cfg.found ? ONCE : { defineMotion: 0, mapCommand: 0 }), JSON.stringify(calls));
+  check(results, cfg.found ? "features installed" : "host finds nothing", same(calls, cfg.found ? ONCE : { defineMotion: 0, defineAction: 0, mapCommand: 0, map: 0 }), JSON.stringify(calls));
 
   if (cfg.found) {
     for (const [name, lines, cursor, keys, expect] of SCENARIOS) {
@@ -229,7 +263,8 @@ async function runConfig(browser, base, cfg) {
   }
   for (const [i, [name, lines, cursor, keys]] of BUILTINS.entries()) {
     const got = await play(page, lines, cursor, keys);
-    check(results, `built-in unchanged: ${name}`, same(got, before[i]), `${JSON.stringify(got)} vs ${JSON.stringify(before[i])}`);
+    // Only the extension copies yanks to the clipboard.
+    check(results, `built-in unchanged: ${name}`, same({ ...got, clipboard: null }, { ...before[i], clipboard: null }), `${JSON.stringify(got)} vs ${JSON.stringify(before[i])}`);
   }
 
   if (cfg.found) {

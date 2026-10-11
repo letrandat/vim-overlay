@@ -14,12 +14,16 @@ const scripts = manifest.content_scripts[0].js.map((f) => [f, fs.readFileSync(pa
 const oracle = JSON.parse(fs.readFileSync(path.join(__dirname, "oracle.json"), "utf8"));
 
 function stubVim() {
-  const Vim = { motions: {}, commands: [], defines: 0 };
+  const Vim = { motions: {}, actions: {}, commands: [], maps: [], defines: 0 };
+  const controller = Object.create({ pushText() {} });
   Vim.defineMotion = (name, fn) => {
     Vim.defines++;
     Vim.motions[name] = fn;
   };
   Vim.mapCommand = (keys, type, name, args) => Vim.commands.push({ keys, type, name, args });
+  Vim.map = (lhs, rhs, ctx) => Vim.maps.push([lhs, rhs, ctx]);
+  Vim.defineAction = (name, fn) => (Vim.actions[name] = fn);
+  Vim.getRegisterController = () => controller;
   return Vim;
 }
 
@@ -62,7 +66,8 @@ function load({ before = () => {}, only } = {}) {
   tick();
   tick();
   assert.deepStrictEqual(installs, [a], "one install per Vim object across duplicates and polls");
-  assert.deepStrictEqual(a.commands.map((c) => c.keys), ["ii", "ai", "iI", "aI"], "a throwing feature does not stop the others");
+  assert.deepStrictEqual(a.commands.map((c) => c.keys), ["ii", "ai", "iI", "aI", "ae", "<C-n>", "<C-p>"], "a throwing feature does not stop the others");
+  assert.deepStrictEqual(a.maps, [["Y", "y$", "normal"]], "Y maps to y$ in Normal mode");
   assert.ok(warnings.some((w) => w.includes("broken-feature")), "warning names the feature");
   assert.ok(warnings.some((w) => w.includes("broken-host")), "warning names the host");
   const b = stubVim();
@@ -72,12 +77,12 @@ function load({ before = () => {}, only } = {}) {
   for (const [file, code] of scripts) vm.runInContext(code, sandbox, { filename: file });
   tick();
   assert.strictEqual(run.timers.length, 1, "a second copy of the scripts does not poll again");
-  assert.strictEqual(a.commands.length, 4, "a second copy of the scripts does not install again");
+  assert.deepStrictEqual([a.commands.length, a.maps.length], [7, 1], "a second copy of the scripts does not install again");
   assert.strictEqual(Object.keys(sandbox.vimOverlay.hosts).length, 6, "a second copy of the scripts adds no hosts");
   const c = stubVim();
   vims.push(c);
   tick();
-  assert.deepStrictEqual([c.defines, c.commands.length], [1, 4], "a Vim object found after a second copy installs once");
+  assert.deepStrictEqual([c.defines, c.commands.length], [2, 7], "a Vim object found after a second copy installs once");
   console.log("ok  main.js: once per Vim object, failures isolated and named, second copy is a no-op");
 }
 

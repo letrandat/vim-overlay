@@ -15,6 +15,10 @@
         "src/hosts/codemirror5.js",
         "src/hosts/ace.js",
         "src/features/indent-object.js",
+        "src/features/entire-object.js",
+        "src/features/yank-to-eol.js",
+        "src/features/clipboard.js",
+        "src/features/complete.js",
         "src/main.js"
       ]
     }
