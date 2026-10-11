@@ -6,8 +6,9 @@
   const pushed = new WeakSet(); // chunk arrays this copy of the script has pushed into
   const runtimes = new Map(); // require -> { seen: Set of module ids, pending: Set of ids, vims }
   const isVim = (v) => typeof v?.defineMotion === "function" && typeof v.mapCommand === "function";
-  // Where vim.js builds its API object. Most modules that only use the API do not match.
-  const DEFINES_VIM = /[{,]\s*defineMotion\s*[:(,}]/;
+  // Where vim.js builds its API object. Most modules that only use the API do not match. Development
+  // builds wrap each module in an eval string, where line breaks are the two characters \n.
+  const DEFINES_VIM = /[{,](?:\s|\\[nrt])*defineMotion(?:\s|\\[nrt])*[:(,}]/;
   const MISS = Symbol("vim-overlay probe");
 
   // A module's exports if the page has run it, else undefined. Webpack's require turns the id into
