@@ -48,8 +48,9 @@
 
   // Whether a global named `name` is defined by a getter. The window and its prototypes are not
   // proxies and their prototypes cannot change, so reading their descriptors runs no page code.
+  // A page can reassign globalThis but not window.
   function globalAccessor(name) {
-    for (let o = globalThis; o !== null; o = Object.getPrototypeOf(o)) {
+    for (let o = window; o !== null; o = Object.getPrototypeOf(o)) {
       const d = Object.getOwnPropertyDescriptor(o, name);
       if (d) return !("value" in d);
     }

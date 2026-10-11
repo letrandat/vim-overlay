@@ -119,6 +119,7 @@ function load({ before = () => {}, only } = {}) {
     window.pageRequire = require;
     Object.defineProperty(globalThis, "optional", { get() { ran.push("global getter"); } });
     globalThis.$ = "a page global with the name of a minified module variable";
+    Object.defineProperty(Object.prototype, "protoGetter", { configurable: true, get() { ran.push("prototype getter"); } });
     chunks.push([["main"], {
       proxy(module) {
         module.exports = new Proxy({}, { ownKeys() { throw new Error("trap"); } });
@@ -132,6 +133,7 @@ function load({ before = () => {}, only } = {}) {
         Object.defineProperty(exports, "b", { enumerable: true, get: () => dep.value });
         Object.defineProperty(exports, "c", { enumerable: true, get: () => optional });
         Object.defineProperty(exports, "d", { enumerable: true, get: () => pending });
+        Object.defineProperty(exports, "e", { enumerable: true, get: () => protoGetter });
         return;
         let pending; // read before initialization: the getter throws
       },
