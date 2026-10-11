@@ -29,6 +29,7 @@ const CONFIGS = [
   { host: "codemirror5", page: "codemirror5.html", found: true, offsetDoc: true },
   { host: "ace", page: "ace.html", found: true, keyUndo: true },
   { host: "webpack", page: "monaco-webpack.html", found: true },
+  { host: "webpack", page: "monaco-webpack.html?delay=1&runtimes=2", found: true },
 ];
 
 const WITH_TAIL = [
