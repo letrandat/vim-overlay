@@ -4,6 +4,8 @@
 // run and does not run an unrun module's factory: a module run early can throw and leave the page a
 // broken copy. Reading a Proxy export still runs its traps, which can load other modules early, and so
 // can a getter written inside a `with` block, which no check here can tell from a module variable.
+// Where a module exports monaco-vim's initVimMode but not Vim, the host calls initVimMode once on a
+// stub editor (see vimFromInit).
 (() => {
   const pushed = new WeakSet(); // chunk arrays this copy of the script has pushed into
   // require -> { chunks, walked: walk key at the last walk, seen: Map of module id -> factory, candidates: Set of ids, vims }
@@ -57,6 +59,44 @@
     return false;
   }
 
+  // An editor that accepts every property read, call and construction, for monaco-vim to attach to.
+  function stubEditor() {
+    const any = new Proxy(function () {}, {
+      get: (_, key) => (key === Symbol.toPrimitive ? () => 0 : key === "then" ? undefined : any),
+      apply: () => any,
+      construct: () => any,
+    });
+    return any;
+  }
+
+  // monaco-vim's entry exports its adapter class, which holds Vim, and initVimMode. A production
+  // build that drops the unused class (CoderPad) leaves only initVimMode, so the host calls it once
+  // on a stub editor, reads Vim from the class of the adapter it returns, and disposes the adapter.
+  // Export names can be shortened, so it calls exported functions whose source wires the status bar
+  // events initVimMode names, as initVimMode and copies of it do, until one yields Vim.
+  const INIT_VIM_MODE = /["']vim-keypress["'][^]*["']vim-command-done["']/;
+  // Not retried: a function's source does not change, and a call that throws may have run page code.
+  const tried = new WeakSet();
+  function vimFromInit(init) {
+    if (typeof init !== "function" || tried.has(init)) return undefined;
+    tried.add(init);
+    if (!INIT_VIM_MODE.test(Function.prototype.toString.call(init))) return undefined;
+    let adapter;
+    try {
+      adapter = init(stubEditor());
+    } catch (err) {
+      console.warn("[vim-overlay] initVimMode on a stub editor failed:", err);
+      return undefined;
+    }
+    try {
+      return read(read(adapter, "constructor"), "Vim");
+    } finally {
+      try {
+        adapter?.dispose?.();
+      } catch {}
+    }
+  }
+
   const isVim = (v) => typeof read(v, "defineMotion") === "function" && typeof read(v, "mapCommand") === "function";
 
   function vimsIn(exports) {
@@ -77,6 +117,18 @@
         const Vim = isVim(value) ? value : read(value, "Vim");
         if (isVim(Vim)) vims.push(Vim);
       } catch {}
+    }
+    if (!vims.length) {
+      for (const value of values) {
+        let Vim;
+        try {
+          Vim = vimFromInit(value);
+        } catch {}
+        if (isVim(Vim)) {
+          vims.push(Vim);
+          break;
+        }
+      }
     }
     return vims;
   }

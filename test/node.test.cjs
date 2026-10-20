@@ -91,7 +91,7 @@ function load({ before = () => {}, only } = {}) {
   // page code for it: not a module the page has not run, nor a re-export's or a global's getter.
   // A Proxy export whose ownKeys trap throws does not stop it, nor does a page global that shares
   // the name of the module variable holding Vim.
-  const { sandbox } = load({ only: ["src/registry.js", "src/hosts/webpack.js"] });
+  const { sandbox, warnings } = load({ only: ["src/registry.js", "src/hosts/webpack.js"] });
   sandbox.document.querySelector = () => ({}); // an editor is on the page
   sandbox.self = sandbox;
   sandbox.ran = [];
@@ -144,6 +144,32 @@ function load({ before = () => {}, only } = {}) {
       later(module, exports) {
         ran.push("later");
         exports.Vim = { defineMotion() {}, mapCommand() {} };
+        exports.initVimMode = () => ran.push(["later initVimMode", "vim-keypress", "vim-command-done"]);
+      },
+      init(module, exports) {
+        ran.push("init");
+        const Vim = (window.initVim = { defineMotion() {}, mapCommand() {} });
+        class Adapter { dispose() { ran.push("dispose"); throw new Error("dispose"); } on() {} }
+        Adapter.Vim = Vim;
+        const i = (editor) => {
+          ran.push("initVimMode");
+          editor.onKeyDown(() => {}).dispose();
+          editor.createContextKey("insertMode", true).set(false);
+          const adapter = editor.getConfiguration().fontInfo.typicalFullwidthCharacterWidth + 1 && new Adapter();
+          adapter.on("vim-keypress", () => {});
+          adapter.on("vim-command-done", () => {});
+          return adapter;
+        };
+        // A shortened export name, and a function named initVimMode that is not monaco-vim's.
+        Object.defineProperty(exports, "P", { enumerable: true, get: () => i });
+        exports.initVimMode = () => ran.push("not monaco-vim");
+      },
+      broken(module, exports) {
+        const unused = { defineMotion() {} };
+        exports.initVimMode = () => {
+          ran.push("broken initVimMode");
+          throw new Error(["vim-keypress", "vim-command-done"].join());
+        };
       },
     }]);`,
     sandbox
@@ -159,7 +185,17 @@ function load({ before = () => {}, only } = {}) {
   sandbox.pageRequire("later");
   found = host();
   assert.ok(found.length === 2 && found[1] === sandbox.pageRequire("later").Vim, "finds a module once the page runs it");
-  console.log("ok  webpack host: finds Vim in modules the page ran; runs no module, re-export or global getter");
+  sandbox.pageRequire("init");
+  sandbox.pageRequire("broken");
+  found = [host(), host()][1];
+  assert.ok(warnings.length === 1 && warnings[0].startsWith("[vim-overlay] initVimMode on a stub editor failed:"), "names a failing initVimMode once");
+  assert.deepStrictEqual(
+    sandbox.ran.slice(2),
+    ["later", "init", "initVimMode", "dispose", "broken initVimMode"],
+    "calls monaco-vim's initVimMode once under any export name, only where no Vim is exported, and disposes the adapter"
+  );
+  assert.ok(found.length === 3 && found[2] === sandbox.initVim, "finds Vim on the class of the adapter, even when dispose throws");
+  console.log("ok  webpack host: finds Vim in modules the page ran; runs no module, re-export or global getter; falls back to initVimMode");
 }
 
 const Vim = stubVim();

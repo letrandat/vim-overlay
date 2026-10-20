@@ -4,7 +4,9 @@
      ?delay=1: a plain editor is on the page, and the monaco-vim chunk arrives before the module it
      imports; the page runs it later.
      ?runtimes=2: two runtimes share the chunk array; the page uses the second.
-     ?mangle=1: monaco-vim's export is a getter under a shortened name, as production builds emit. -->
+     ?mangle=1: monaco-vim's export is a getter under a shortened name, as production builds emit.
+     ?init=1: monaco-vim exports only initVimMode, as CoderPad's build does after dropping the unused
+     adapter class. -->
 <meta charset="utf-8" />
 <div id="editor" style="width: 900px; height: 500px"></div>
 <div id="status"></div>
@@ -52,13 +54,18 @@
     for (let i = 0; i < Number(params.get("runtimes") ?? 1); i++) webpackRequire = installWebpackRuntime("webpackChunkfixture");
     const editorChunk = [["editor"], { "monaco-editor/esm/vs/editor/editor.api": (module) => (module.exports = monaco) }];
     // The UMD build takes its CommonJS branch here, as the ESM build would in a real bundle.
-    const vimModule = params.has("mangle")
-      ? new Function("module", "exports", "require", `const inner = { exports: {} };
+    const wrap = (exportsCode) =>
+      new Function("module", "exports", "require", `const inner = { exports: {} };
           (function (module, exports, require) {\n${source}\n})(inner, inner.exports, require);
           const { VimMode, initVimMode } = inner.exports;
-          Object.defineProperty(exports, "F", { enumerable: true, get: () => VimMode });
+          window.pageVimMode = VimMode;
+          ${exportsCode}`);
+    const vimModule = params.has("mangle")
+      ? wrap(`Object.defineProperty(exports, "F", { enumerable: true, get: () => VimMode });
           Object.defineProperty(exports, "P", { enumerable: true, get: () => initVimMode });`)
-      : new Function("module", "exports", "require", source);
+      : params.has("init")
+        ? wrap(`Object.defineProperty(exports, "initVimMode", { enumerable: true, get: () => initVimMode });`)
+        : new Function("module", "exports", "require", source);
     const vimChunk = [["vim"], { "monaco-vim": vimModule }];
     if (params.has("delay")) {
       monaco.editor.create(document.getElementById("plain"), { value: "no vim here" });
@@ -69,7 +76,11 @@
     self.webpackChunkfixture.push(editorChunk);
     self.webpackChunkfixture.push(vimChunk);
     const vimExports = webpackRequire("monaco-vim");
-    const MonacoVim = params.has("mangle") ? { VimMode: vimExports.F, initVimMode: vimExports.P } : vimExports;
+    const MonacoVim = params.has("mangle")
+      ? { VimMode: vimExports.F, initVimMode: vimExports.P }
+      : params.has("init")
+        ? { VimMode: window.pageVimMode, initVimMode: vimExports.initVimMode }
+        : vimExports;
     track(MonacoVim.VimMode.Vim);
     let editor, adapter;
     window.setText = (text) => editor.setValue(text);
