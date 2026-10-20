@@ -57,6 +57,31 @@
     return false;
   }
 
+  // An editor that accepts every property read, call and construction, for monaco-vim to attach to.
+  function stubEditor() {
+    const any = new Proxy(function () {}, {
+      get: (_, key) => (key === Symbol.toPrimitive ? () => 0 : key === "then" ? undefined : any),
+      apply: () => any,
+      construct: () => any,
+    });
+    return any;
+  }
+
+  // monaco-vim's entry exports its adapter class, which holds Vim, and initVimMode. A production
+  // build that drops the unused class (CoderPad) leaves only initVimMode, so the host calls it once
+  // on a stub editor, reads Vim from the class of the adapter it returns, and disposes the adapter.
+  const initialized = new WeakSet();
+  function vimFromInit(init) {
+    if (typeof init !== "function" || initialized.has(init)) return undefined;
+    initialized.add(init);
+    const adapter = init(stubEditor());
+    try {
+      return read(read(adapter, "constructor"), "Vim");
+    } finally {
+      adapter?.dispose?.();
+    }
+  }
+
   const isVim = (v) => typeof read(v, "defineMotion") === "function" && typeof read(v, "mapCommand") === "function";
 
   function vimsIn(exports) {
@@ -75,6 +100,12 @@
     for (const value of values) {
       try {
         const Vim = isVim(value) ? value : read(value, "Vim");
+        if (isVim(Vim)) vims.push(Vim);
+      } catch {}
+    }
+    if (!vims.length) {
+      try {
+        const Vim = vimFromInit(read(exports, "initVimMode"));
         if (isVim(Vim)) vims.push(Vim);
       } catch {}
     }

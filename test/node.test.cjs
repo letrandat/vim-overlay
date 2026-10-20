@@ -144,6 +144,20 @@ function load({ before = () => {}, only } = {}) {
       later(module, exports) {
         ran.push("later");
         exports.Vim = { defineMotion() {}, mapCommand() {} };
+        exports.initVimMode = () => ran.push("later initVimMode");
+      },
+      init(module, exports) {
+        ran.push("init");
+        const Vim = (window.initVim = { defineMotion() {}, mapCommand() {} });
+        class Adapter { dispose() { ran.push("dispose"); } }
+        Adapter.Vim = Vim;
+        const i = (editor) => {
+          ran.push("initVimMode");
+          editor.onKeyDown(() => {}).dispose();
+          editor.createContextKey("insertMode", true).set(false);
+          return editor.getConfiguration().fontInfo.typicalFullwidthCharacterWidth + 1 && new Adapter();
+        };
+        Object.defineProperty(exports, "initVimMode", { enumerable: true, get: () => i });
       },
     }]);`,
     sandbox
@@ -159,7 +173,11 @@ function load({ before = () => {}, only } = {}) {
   sandbox.pageRequire("later");
   found = host();
   assert.ok(found.length === 2 && found[1] === sandbox.pageRequire("later").Vim, "finds a module once the page runs it");
-  console.log("ok  webpack host: finds Vim in modules the page ran; runs no module, re-export or global getter");
+  sandbox.pageRequire("init");
+  found = [host(), host()][1];
+  assert.deepStrictEqual(sandbox.ran.slice(2), ["later", "init", "initVimMode", "dispose"], "calls initVimMode once, only where no Vim is exported, and disposes the adapter");
+  assert.ok(found.length === 3 && found[2] === sandbox.initVim, "finds Vim on the class of the adapter initVimMode returns");
+  console.log("ok  webpack host: finds Vim in modules the page ran; runs no module, re-export or global getter; falls back to initVimMode");
 }
 
 const Vim = stubVim();

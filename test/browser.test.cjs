@@ -30,6 +30,7 @@ const CONFIGS = [
   { host: "ace", page: "ace.html", found: true, keyUndo: true },
   { host: "webpack", page: "monaco-webpack.html", found: true },
   { host: "webpack", page: "monaco-webpack.html?delay=1&runtimes=2&mangle=1", found: true },
+  { host: "webpack", page: "monaco-webpack.html?init=1", found: true },
 ];
 
 const WITH_TAIL = [
