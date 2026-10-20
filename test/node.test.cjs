@@ -149,15 +149,27 @@ function load({ before = () => {}, only } = {}) {
       init(module, exports) {
         ran.push("init");
         const Vim = (window.initVim = { defineMotion() {}, mapCommand() {} });
-        class Adapter { dispose() { ran.push("dispose"); } }
+        class Adapter { dispose() { ran.push("dispose"); throw new Error("dispose"); } on() {} }
         Adapter.Vim = Vim;
         const i = (editor) => {
           ran.push("initVimMode");
           editor.onKeyDown(() => {}).dispose();
           editor.createContextKey("insertMode", true).set(false);
-          return editor.getConfiguration().fontInfo.typicalFullwidthCharacterWidth + 1 && new Adapter();
+          const adapter = editor.getConfiguration().fontInfo.typicalFullwidthCharacterWidth + 1 && new Adapter();
+          adapter.on("vim-keypress", () => {});
+          adapter.on("vim-command-done", () => {});
+          return adapter;
         };
-        Object.defineProperty(exports, "initVimMode", { enumerable: true, get: () => i });
+        // A shortened export name, and a function named initVimMode that is not monaco-vim's.
+        Object.defineProperty(exports, "P", { enumerable: true, get: () => i });
+        exports.initVimMode = () => ran.push("not monaco-vim");
+      },
+      broken(module, exports) {
+        const unused = { defineMotion() {} };
+        exports.initVimMode = () => {
+          ran.push("broken initVimMode");
+          throw new Error(["vim-keypress", "vim-command-done"].join());
+        };
       },
     }]);`,
     sandbox
@@ -174,9 +186,17 @@ function load({ before = () => {}, only } = {}) {
   found = host();
   assert.ok(found.length === 2 && found[1] === sandbox.pageRequire("later").Vim, "finds a module once the page runs it");
   sandbox.pageRequire("init");
+  sandbox.pageRequire("broken");
+  const warn = console.warn;
+  console.warn = () => {};
   found = [host(), host()][1];
-  assert.deepStrictEqual(sandbox.ran.slice(2), ["later", "init", "initVimMode", "dispose"], "calls initVimMode once, only where no Vim is exported, and disposes the adapter");
-  assert.ok(found.length === 3 && found[2] === sandbox.initVim, "finds Vim on the class of the adapter initVimMode returns");
+  console.warn = warn;
+  assert.deepStrictEqual(
+    sandbox.ran.slice(2),
+    ["later", "init", "initVimMode", "dispose", "broken initVimMode"],
+    "calls monaco-vim's initVimMode once under any export name, only where no Vim is exported, and disposes the adapter"
+  );
+  assert.ok(found.length === 3 && found[2] === sandbox.initVim, "finds Vim on the class of the adapter, even when dispose throws");
   console.log("ok  webpack host: finds Vim in modules the page ran; runs no module, re-export or global getter; falls back to initVimMode");
 }
 

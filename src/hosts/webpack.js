@@ -4,6 +4,8 @@
 // run and does not run an unrun module's factory: a module run early can throw and leave the page a
 // broken copy. Reading a Proxy export still runs its traps, which can load other modules early, and so
 // can a getter written inside a `with` block, which no check here can tell from a module variable.
+// Where a module exports monaco-vim's initVimMode but not Vim, the host calls initVimMode once on a
+// stub editor (see vimFromInit).
 (() => {
   const pushed = new WeakSet(); // chunk arrays this copy of the script has pushed into
   // require -> { chunks, walked: walk key at the last walk, seen: Map of module id -> factory, candidates: Set of ids, vims }
@@ -70,15 +72,27 @@
   // monaco-vim's entry exports its adapter class, which holds Vim, and initVimMode. A production
   // build that drops the unused class (CoderPad) leaves only initVimMode, so the host calls it once
   // on a stub editor, reads Vim from the class of the adapter it returns, and disposes the adapter.
+  // Export names can be shortened, so it calls any exported function whose source wires the status
+  // bar events that only monaco-vim's initVimMode names.
+  const INIT_VIM_MODE = /["']vim-keypress["'][^]*["']vim-command-done["']/;
   const initialized = new WeakSet();
   function vimFromInit(init) {
     if (typeof init !== "function" || initialized.has(init)) return undefined;
-    initialized.add(init);
-    const adapter = init(stubEditor());
+    if (!INIT_VIM_MODE.test(Function.prototype.toString.call(init))) return undefined;
+    initialized.add(init); // not retried: a call that throws midway may have run page code
+    let adapter;
+    try {
+      adapter = init(stubEditor());
+    } catch (err) {
+      console.warn("[vim-overlay] initVimMode on a stub editor failed:", err);
+      return undefined;
+    }
     try {
       return read(read(adapter, "constructor"), "Vim");
     } finally {
-      adapter?.dispose?.();
+      try {
+        adapter?.dispose?.();
+      } catch {}
     }
   }
 
@@ -104,10 +118,12 @@
       } catch {}
     }
     if (!vims.length) {
-      try {
-        const Vim = vimFromInit(read(exports, "initVimMode"));
-        if (isVim(Vim)) vims.push(Vim);
-      } catch {}
+      for (const value of values) {
+        try {
+          const Vim = vimFromInit(value);
+          if (isVim(Vim)) vims.push(Vim);
+        } catch {}
+      }
     }
     return vims;
   }
