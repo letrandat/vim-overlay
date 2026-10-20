@@ -91,7 +91,7 @@ function load({ before = () => {}, only } = {}) {
   // page code for it: not a module the page has not run, nor a re-export's or a global's getter.
   // A Proxy export whose ownKeys trap throws does not stop it, nor does a page global that shares
   // the name of the module variable holding Vim.
-  const { sandbox } = load({ only: ["src/registry.js", "src/hosts/webpack.js"] });
+  const { sandbox, warnings } = load({ only: ["src/registry.js", "src/hosts/webpack.js"] });
   sandbox.document.querySelector = () => ({}); // an editor is on the page
   sandbox.self = sandbox;
   sandbox.ran = [];
@@ -144,7 +144,7 @@ function load({ before = () => {}, only } = {}) {
       later(module, exports) {
         ran.push("later");
         exports.Vim = { defineMotion() {}, mapCommand() {} };
-        exports.initVimMode = () => ran.push("later initVimMode");
+        exports.initVimMode = () => ran.push(["later initVimMode", "vim-keypress", "vim-command-done"]);
       },
       init(module, exports) {
         ran.push("init");
@@ -187,10 +187,8 @@ function load({ before = () => {}, only } = {}) {
   assert.ok(found.length === 2 && found[1] === sandbox.pageRequire("later").Vim, "finds a module once the page runs it");
   sandbox.pageRequire("init");
   sandbox.pageRequire("broken");
-  const warn = console.warn;
-  console.warn = () => {};
   found = [host(), host()][1];
-  console.warn = warn;
+  assert.ok(warnings.length === 1 && warnings[0].startsWith("[vim-overlay] initVimMode on a stub editor failed:"), "names a failing initVimMode once");
   assert.deepStrictEqual(
     sandbox.ran.slice(2),
     ["later", "init", "initVimMode", "dispose", "broken initVimMode"],
