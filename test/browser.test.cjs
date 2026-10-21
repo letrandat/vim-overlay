@@ -48,6 +48,9 @@ const WITH_TAIL = [
 const keep = (lines, ...idx) => idx.map((i) => lines[i]);
 const ENDIF = oracle.find((f) => f.name === "vim-endif").lines;
 const BLANKS = oracle.find((f) => f.name === "blank-lines-inside-blocks").lines;
+const CALL = ["def f():", "    stack.append(stack.pop() / num)", "    return 1"];
+const NESTED = "f((a) + (b) + (c) + (d) + (e) + (g) + x)";
+const ABC = ["a", "b", "c", "d", "e"];
 const FRESH = ["fresh = 0", "fresh_", "fresh_count += 1", "x = fresh_total"];
 const withLine = (lines, i, text) => lines.map((l, j) => (j === i ? text : l));
 
@@ -98,6 +101,23 @@ const SCENARIOS = [
   ["moving the cursor ends the completion; dot repeats what came after", ["", "", "fresh_count", "fresh_countdown"], [0, 0], "ifresh_<C-n><Left><Right><C-n><Esc>j.", { lines: ["fresh_countdown", "down", "fresh_count", "fresh_countdown"] }],
   ["u after completing an existing prefix undoes the completion", ["fresh_", "fresh_count"], [0, 0], "A<C-n><Esc>u", { lines: ["fresh_", "fresh_count"] }],
   ["Ctrl-N without a match changes nothing", FRESH, [0, 0], "Azz<C-n><Esc>", { lines: withLine(FRESH, 0, "fresh = 0zz") }],
+  ["Ctrl-J moves the line down", ABC, [1, 0], "<C-j>", { lines: ["a", "c", "b", "d", "e"], cursor: [2, 0], mode: "normal" }],
+  ["Ctrl-K moves the line up", ABC, [1, 0], "<C-k>", { lines: ["b", "a", "c", "d", "e"], cursor: [0, 0] }],
+  ["Ctrl-J keeps the column", ["abc", "def"], [0, 2], "<C-j>", { lines: ["def", "abc"], cursor: [1, 2] }],
+  ["2 Ctrl-J moves the line two down", ABC, [1, 0], "2<C-j>", { lines: ["a", "c", "d", "b", "e"], cursor: [3, 0] }],
+  ["a count past the end stops at the last line", ABC, [2, 0], "9<C-j>", { lines: ["a", "b", "d", "e", "c"], cursor: [4, 0] }],
+  ["Ctrl-K on the first line changes nothing", ABC, [0, 0], "<C-k>", { lines: ABC, cursor: [0, 0] }],
+  ["Ctrl-J on the last line changes nothing", ABC, [4, 0], "<C-j>", { lines: ABC, cursor: [4, 0] }],
+  ["u undoes Ctrl-J", ABC, [1, 0], "<C-j>u", { lines: ABC }],
+  ["d Ctrl-J changes nothing", ABC, [1, 0], "d<C-j>", { lines: ABC, mode: "normal" }],
+  ["Visual Ctrl-J moves the selected lines and the selection", ABC, [1, 0], "Vj<C-j>", { lines: ["a", "d", "b", "c", "e"], selection: [2, 3], mode: "visual-line" }],
+  ["Visual Ctrl-K twice moves them two up", ABC, [2, 0], "Vj<C-k><C-k>", { lines: ["c", "d", "a", "b", "e"], selection: [0, 1], mode: "visual-line" }],
+  ["characterwise Visual Ctrl-J moves whole lines", ABC, [1, 0], "vj<C-j>", { lines: ["a", "d", "b", "c", "e"], selection: [2, 3], mode: "visual" }],
+  ["Visual Ctrl-J then d deletes the moved lines", ABC, [1, 0], "Vj<C-j>d", { lines: ["a", "d", "e"] }],
+  ["ci( on a closing paren after a nested pair", CALL, [1, 34], "ci(x<Esc>", { lines: withLine(CALL, 1, "    stack.append(x)") }],
+  ["ci( before a closing paren after a nested pair", CALL, [1, 33], "ci(x<Esc>", { lines: withLine(CALL, 1, "    stack.append(x)") }],
+  ["di( past more than ten parens", [NESTED], [0, 38], "di(", { lines: ["f()"] }],
+  ["da( on a closing paren after a nested pair", CALL, [1, 34], "da(", { lines: withLine(CALL, 1, "    stack.append") }],
 ];
 
 // Undo after Insert mode with completion, where the host undoes a typed insert as one step.
@@ -162,7 +182,7 @@ async function openPage(browser, url, withExtension) {
 
 // Hold Shift for shifted characters, as a real keyboard does. Ace's vim maps
 // keys by keyCode and misreads an unshifted ">" after "." as another ".".
-const KEYS = { "<Esc>": "Escape", "<C-n>": "Control+KeyN", "<C-p>": "Control+KeyP", "<C-r>": "Control+KeyR", "<Left>": "ArrowLeft", "<Right>": "ArrowRight", ">": "Shift+Period", "<": "Shift+Comma", "(": "Shift+Digit9", '"': "Shift+Quote" };
+const KEYS = { "<Esc>": "Escape", "<C-n>": "Control+KeyN", "<C-p>": "Control+KeyP", "<C-r>": "Control+KeyR", "<C-j>": "Control+KeyJ", "<C-k>": "Control+KeyK", "<Left>": "ArrowLeft", "<Right>": "ArrowRight", ">": "Shift+Period", "<": "Shift+Comma", "(": "Shift+Digit9", '"': "Shift+Quote" };
 for (const c of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") KEYS[c] = "Shift+Key" + c;
 
 async function play(page, lines, [line, ch], keys) {
@@ -243,7 +263,7 @@ function check(results, name, ok, detail) {
 }
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const installed = (page) => page.evaluate(() => window.calls);
-const ONCE = { defineMotion: 2, defineAction: 1, mapCommand: 7, map: 1 };
+const ONCE = { defineMotion: 3, defineAction: 1, mapCommand: 11, map: 1 };
 
 async function runConfig(browser, base, cfg) {
   const results = [];

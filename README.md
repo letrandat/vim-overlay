@@ -23,6 +23,8 @@ A host finds the `Vim` objects live in the page. `src/main.js` asks every host o
 | `yank-to-eol` | `Y` | Yanks to the end of the line, as in Neovim. `C` and `D` already act like `c$` and `d$` in every host. Visual-mode `Y` still yanks lines. |
 | `clipboard` | any yank | A yank into the unnamed register also goes to the system clipboard. Deletes and named registers do not. |
 | `complete` | `Ctrl-N`, `Ctrl-P` in Insert mode | Completes the word before the cursor from words in the buffer, like Vim's `i_CTRL-N`. No popup: each press puts the next match in place, and after the last the typed prefix returns. `Ctrl-N` meets matches below the cursor first, `Ctrl-P` above. `.` repeats the completed text, and `u` undoes it with the rest of the insert, except in Ace, which undoes typing one key at a time. On Windows and Linux, Chrome keeps `Ctrl-N` for a new window. |
+| `move-lines` | `Ctrl-J`, `Ctrl-K` in Normal and Visual mode | Moves the current line, or every line a Visual selection touches, down or up, as the nvim and Zed configs bind them. A count moves that many lines, stopping at the first or last line. Visual mode keeps the selection on the moved lines. One `u` undoes a move. Indentation is left as it is. After an operator (`d<C-j>`) the keys do nothing. |
+| `bracket-objects` | `i(`, `a(`, `i[`, `a[`, `i{`, `a{`, `i<`, `a<` (and the closing-bracket and `b`/`B` forms) | Fixes these in monaco-vim (LeetCode, CodeSignal, CoderPad) only. monaco-vim's bracket search misses the open bracket when a pair sits between it and the cursor (`ci(` on the last `)` of `f(g() / x)`), wraps around the buffer, and gives up after ten brackets. The feature swaps in CodeMirror 5's search, which the other hosts already use. |
 
 ## Install
 
