@@ -135,6 +135,21 @@ const SCENARIOS = [
   ["u undoes gcj", CODE, [0, 0], "gcju", { lines: CODE }],
   ["Visual gc comments the selected lines", CODE, [3, 4], "Vjgc", { lines: lead("# ", CODE, 3, 4), cursor: [3, 0], mode: "normal" }],
   ["characterwise Visual gc comments whole lines", CODE, [0, 2], "vjgc", { lines: lead("# ", CODE, 0, 1), cursor: [0, 2] }],
+  ["g; goes to the last change", ABC, [0, 0], "Ax<Esc>3GAy<Esc>Gg;", { lines: ["ax", "b", "cy", "d", "e"], cursor: [2, 1], mode: "normal" }],
+  ["g; again goes to the change before", ABC, [0, 0], "Ax<Esc>3GAy<Esc>Gg;g;", { cursor: [0, 1] }],
+  ["g; at the oldest change stays", ABC, [0, 0], "Ax<Esc>3GAy<Esc>Gg;g;g;", { cursor: [0, 1] }],
+  ["g, goes back to the newer change", ABC, [0, 0], "Ax<Esc>3GAy<Esc>Gg;g;g,", { cursor: [2, 1] }],
+  ["g, right after a change does nothing", ABC, [0, 0], "Ax<Esc>3GAy<Esc>Gg,", { cursor: [4, 0] }],
+  ["2g; skips a change", ABC, [0, 0], "Ax<Esc>3GAy<Esc>5GAz<Esc>gg2g;", { cursor: [2, 1] }],
+  ["changes close together on one line keep one position", ABC, [0, 0], "Ax<Esc>0iw<Esc>Gg;g;", { lines: ["wax", "b", "c", "d", "e"], cursor: [0, 0] }],
+  ["one Insert session over two lines keeps one position", ABC, [0, 0], "Ax<CR>y<Esc>Gg;g;", { cursor: [1, 0] }],
+  ["dd is a change", ABC, [2, 0], "ddGg;", { lines: ["a", "b", "d", "e"], cursor: [2, 0] }],
+  ["a position moves with lines added above it", ABC, [3, 0], "Ax<Esc>ggOn<Esc>Gg;g;", { lines: ["n", "a", "b", "c", "dx", "e"], cursor: [4, 1] }],
+  ["backtick dot goes to the last change", ABC, [0, 0], "Ax<Esc>3GAy<Esc>G`.", { cursor: [2, 1] }],
+  ["quote dot goes to the line of the last change", ["a", "  b", "c"], [0, 0], "jAy<Esc>G'.", { cursor: [1, 2] }],
+  ["g; after a macro goes to the macro's last edit", ABC, [0, 0], "qqAx<Esc>jjq@qg;", { lines: ["ax", "b", "cx", "d", "e"], cursor: [2, 1] }],
+  ["typing into an empty buffer is a change", [""], [0, 0], "ix<Esc>oy<Esc>g;g;", { lines: ["x", "y"], cursor: [0, 0] }],
+  ["g; with no change does nothing", ABC, [3, 0], "g;", { cursor: [3, 0], mode: "normal" }],
 ];
 
 // Undo after Insert mode with completion, where the host undoes a typed insert as one step.
@@ -199,11 +214,13 @@ async function openPage(browser, url, withExtension) {
 
 // Hold Shift for shifted characters, as a real keyboard does. Ace's vim maps
 // keys by keyCode and misreads an unshifted ">" after "." as another ".".
-const KEYS = { "<Esc>": "Escape", "<C-n>": "Control+KeyN", "<C-p>": "Control+KeyP", "<C-r>": "Control+KeyR", "<C-j>": "Control+KeyJ", "<C-k>": "Control+KeyK", "<Left>": "ArrowLeft", "<Right>": "ArrowRight", ">": "Shift+Period", "<": "Shift+Comma", "(": "Shift+Digit9", '"': "Shift+Quote" };
+const KEYS = { "<Esc>": "Escape", "<C-n>": "Control+KeyN", "<C-p>": "Control+KeyP", "<C-r>": "Control+KeyR", "<C-j>": "Control+KeyJ", "<C-k>": "Control+KeyK", "<Left>": "ArrowLeft", "<CR>": "Enter", "<Right>": "ArrowRight", ">": "Shift+Period", "<": "Shift+Comma", "(": "Shift+Digit9", '"': "Shift+Quote" };
 for (const c of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") KEYS[c] = "Shift+Key" + c;
 
-async function play(page, lines, [line, ch], keys) {
-  await page.evaluate(
+async function play(page, lines, cursor, keys) {
+  // A null cursor keeps the buffer and cursor as they are.
+  const [line, ch] = cursor ?? [];
+  if (cursor) await page.evaluate(
     ({ text, line, ch }) => {
       window.testVim.handleKey(window.cm, "<Esc>");
       window.setText(text);
@@ -280,7 +297,7 @@ function check(results, name, ok, detail) {
 }
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const installed = (page) => page.evaluate(() => window.calls);
-const ONCE = { defineMotion: 3, defineAction: 1, defineOperator: 1, mapCommand: 12, map: 1 };
+const ONCE = { defineMotion: 4, defineAction: 1, defineOperator: 1, mapCommand: 16, map: 1 };
 
 async function runConfig(browser, base, cfg) {
   const results = [];
@@ -340,6 +357,28 @@ async function runConfig(browser, base, cfg) {
     got = await play(page, ["    a", "b"], [0, 0], "gcjgcc");
     await page.evaluate(() => delete window.cm.editor.getAction);
     check(results, "gc without Monaco's toggle uses the language's token", same(got.lines, ["    a", "# b"]), JSON.stringify(got.lines));
+  }
+  if (cfg.found) {
+    // Monaco shows a relative number on each line, counted from the cursor; other hosts show none.
+    await play(page, ABC, [2, 0], "<Esc>");
+    await page.waitForTimeout(300);
+    const rel = await page.evaluate(() =>
+      [...document.querySelectorAll(".vim-overlay-rel")]
+        .map((e) => [parseFloat(e.parentElement.style.top), [...e.classList].find((c) => /-\d+$/.test(c)).split("-").pop()])
+        .sort((a, b) => a[0] - b[0])
+        .map((x) => x[1])
+        .join(",")
+    );
+    const want = cfg.page.startsWith("monaco") ? "2,1,0,1,2" : "";
+    check(results, "relative line numbers", rel === want, JSON.stringify(rel));
+  }
+  if (cfg.found) {
+    // The page empties the buffer: g; then reaches only changes made after it. Four g; stop at
+    // the oldest new change, so g, goes to the line after it, not to a position from before.
+    await play(page, ABC, [0, 0], "Ax<Esc>jjAy<Esc>");
+    await page.evaluate(() => window.setText(""));
+    const got = await play(page, [], null, "ia<Esc>ob<Esc>oc<Esc>g;g;g;g;g,");
+    check(results, "the page emptying the buffer empties the change list", same(got.cursor, [1, 0]), JSON.stringify(got.cursor));
   }
   if (cfg.found && cfg.host === "codemirror6") {
     await play(page, ["fresh_", "fresh_count"], [0, 0], "A");

@@ -23,6 +23,8 @@
         "src/features/move-lines.js",
         "src/features/bracket-objects.js",
         "src/features/comment.js",
+        "src/features/change-list.js",
+        "src/features/relative-numbers.js",
         "src/main.js"
       ]
     }
