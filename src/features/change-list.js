@@ -83,7 +83,8 @@
     } else if (cm.ace) {
       cm.ace.on("change", (d) => {
         const pos = d.action === "insert" ? changePos(d.start.row, d.start.column, d.lines.join("\n")) : { line: d.start.row, ch: d.start.column };
-        onChange(pos, d.action === "insert" && wholeBuffer(cm, d.lines.join("\n")));
+        // A page that empties the buffer sends only a removal, which leaves it empty.
+        onChange(pos, wholeBuffer(cm, d.action === "insert" ? d.lines.join("\n") : ""));
       });
     } else if (cm.cm6) {
       // The CodeMirror 6 adapter signals once per operation, with its changes as a list, and

@@ -217,8 +217,10 @@ async function openPage(browser, url, withExtension) {
 const KEYS = { "<Esc>": "Escape", "<C-n>": "Control+KeyN", "<C-p>": "Control+KeyP", "<C-r>": "Control+KeyR", "<C-j>": "Control+KeyJ", "<C-k>": "Control+KeyK", "<Left>": "ArrowLeft", "<CR>": "Enter", "<Right>": "ArrowRight", ">": "Shift+Period", "<": "Shift+Comma", "(": "Shift+Digit9", '"': "Shift+Quote" };
 for (const c of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") KEYS[c] = "Shift+Key" + c;
 
-async function play(page, lines, [line, ch], keys) {
-  await page.evaluate(
+async function play(page, lines, cursor, keys) {
+  // A null cursor keeps the buffer and cursor as they are.
+  const [line, ch] = cursor ?? [];
+  if (cursor) await page.evaluate(
     ({ text, line, ch }) => {
       window.testVim.handleKey(window.cm, "<Esc>");
       window.setText(text);
@@ -369,6 +371,14 @@ async function runConfig(browser, base, cfg) {
     );
     const want = cfg.page.startsWith("monaco") ? "2,1,0,1,2" : "";
     check(results, "relative line numbers", rel === want, JSON.stringify(rel));
+  }
+  if (cfg.found) {
+    // The page empties the buffer: g; then reaches only changes made after it. Four g; stop at
+    // the oldest new change, so g, goes to the line after it, not to a position from before.
+    await play(page, ABC, [0, 0], "Ax<Esc>jjAy<Esc>");
+    await page.evaluate(() => window.setText(""));
+    const got = await play(page, [], null, "ia<Esc>ob<Esc>oc<Esc>g;g;g;g;g,");
+    check(results, "the page emptying the buffer empties the change list", same(got.cursor, [1, 0]), JSON.stringify(got.cursor));
   }
   if (cfg.found && cfg.host === "codemirror6") {
     await play(page, ["fresh_", "fresh_count"], [0, 0], "A");
