@@ -53,6 +53,7 @@ const NESTED = "f((a) + (b) + (c) + (d) + (e) + (g) + x)";
 const ABC = ["a", "b", "c", "d", "e"];
 const FRESH = ["fresh = 0", "fresh_", "fresh_count += 1", "x = fresh_total"];
 const withLine = (lines, i, text) => lines.map((l, j) => (j === i ? text : l));
+const RENAME = ["total = 0", "for x in xs:", "    total += x", "print(total, subtotal)"];
 const CODE = ["def f():", "    a = 1", "", "    b = 2", "x"];
 const lead = (prefix, lines, ...idx) => lines.map((l, i) => (idx.includes(i) ? prefix + l : l));
 
@@ -149,6 +150,12 @@ const SCENARIOS = [
   ["quote dot goes to the line of the last change", ["a", "  b", "c"], [0, 0], "jAy<Esc>G'.", { cursor: [1, 2] }],
   ["g; after a macro goes to the macro's last edit", ABC, [0, 0], "qqAx<Esc>jjq@qg;", { lines: ["ax", "b", "cx", "d", "e"], cursor: [2, 1] }],
   ["typing into an empty buffer is a change", [""], [0, 0], "ix<Esc>oy<Esc>g;g;", { lines: ["x", "y"], cursor: [0, 0] }],
+  ["grn renames every whole-word match", RENAME, [2, 6], "grnsum<CR>", { lines: ["sum = 0", "for x in xs:", "    sum += x", "print(sum, subtotal)"], cursor: [2, 4], mode: "normal" }],
+  ["grn keeps the cursor on the word as names before it change length", ["ab ab ab"], [0, 6], "grnxyz<CR>", { lines: ["xyz xyz xyz"], cursor: [0, 8] }],
+  ["grn on a space renames the next word", ["  foo(bar)", "bar"], [0, 0], "grnbaz<CR>", { lines: ["  baz(bar)", "bar"] }],
+  ["Esc in the grn prompt changes nothing", RENAME, [2, 6], "grnsum<Esc>", { lines: RENAME, mode: "normal" }],
+  ["an empty grn name changes nothing", RENAME, [2, 6], "grn<BS><CR>", { lines: RENAME }],
+  ["u undoes a rename in one step", RENAME, [2, 6], "grnsum<CR>u", { lines: RENAME }],
   ["g; with no change does nothing", ABC, [3, 0], "g;", { cursor: [3, 0], mode: "normal" }],
 ];
 
@@ -214,7 +221,7 @@ async function openPage(browser, url, withExtension) {
 
 // Hold Shift for shifted characters, as a real keyboard does. Ace's vim maps
 // keys by keyCode and misreads an unshifted ">" after "." as another ".".
-const KEYS = { "<Esc>": "Escape", "<C-n>": "Control+KeyN", "<C-p>": "Control+KeyP", "<C-r>": "Control+KeyR", "<C-j>": "Control+KeyJ", "<C-k>": "Control+KeyK", "<Left>": "ArrowLeft", "<CR>": "Enter", "<Right>": "ArrowRight", ">": "Shift+Period", "<": "Shift+Comma", "(": "Shift+Digit9", '"': "Shift+Quote" };
+const KEYS = { "<Esc>": "Escape", "<C-n>": "Control+KeyN", "<C-p>": "Control+KeyP", "<C-r>": "Control+KeyR", "<C-j>": "Control+KeyJ", "<C-k>": "Control+KeyK", "<Left>": "ArrowLeft", "<CR>": "Enter", "<BS>": "Backspace", "<Right>": "ArrowRight", ">": "Shift+Period", "<": "Shift+Comma", "(": "Shift+Digit9", '"': "Shift+Quote" };
 for (const c of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") KEYS[c] = "Shift+Key" + c;
 
 async function play(page, lines, cursor, keys) {
@@ -297,7 +304,7 @@ function check(results, name, ok, detail) {
 }
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const installed = (page) => page.evaluate(() => window.calls);
-const ONCE = { defineMotion: 4, defineAction: 1, defineOperator: 1, mapCommand: 16, map: 1 };
+const ONCE = { defineMotion: 4, defineAction: 3, defineOperator: 1, mapCommand: 18, map: 1 };
 
 async function runConfig(browser, base, cfg) {
   const results = [];
@@ -343,6 +350,18 @@ async function runConfig(browser, base, cfg) {
       return value;
     });
     check(results, "dii in a document that starts at line 10", text === "tail", JSON.stringify(text));
+    await page.evaluate(() => {
+      window.savedDoc = window.cm.swapDoc(CodeMirror.Doc("total = 0\ntotal += subtotal", null, 10));
+      window.cm.setCursor({ line: 11, ch: 0 });
+      window.cm.focus();
+    });
+    for (const key of ["g", "r", "n", "s", "u", "m", "Enter"]) await page.keyboard.press(key);
+    const renamed = await page.evaluate(() => {
+      const result = { value: window.cm.getValue(), line: window.cm.getCursor().line };
+      window.cm.swapDoc(window.savedDoc);
+      return result;
+    });
+    check(results, "grn in a document that starts at line 10", same(renamed, { value: "sum = 0\nsum += subtotal", line: 11 }), JSON.stringify(renamed));
   }
   if (cfg.found && cfg.page.startsWith("monaco")) {
     // The token follows the model's language, with and without Monaco's own toggle.
@@ -351,6 +370,19 @@ async function runConfig(browser, base, cfg) {
     await page.waitForTimeout(1000);
     let got = await play(page, ["a"], [0, 0], "gcc");
     check(results, "gcc in JavaScript uses //", same(got.lines, ["// a"]), JSON.stringify(got.lines));
+    // JavaScript has Monaco's own rename, which renames the symbol and not a same-named parameter.
+    const JS = ["let total = 1;", "function f(total) { return total; }", "total += 2;"];
+    await play(page, JS, [0, 5], "grn");
+    // Monaco's JavaScript service starts a few seconds after the language switch.
+    const box = await page
+      .waitForFunction(() => document.activeElement?.classList.contains("rename-input"), null, { timeout: 20000 })
+      .then(() => true, () => false);
+    check(results, "grn in JavaScript opens Monaco's rename box", box);
+    for (const key of "sum") await page.keyboard.press(key);
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(2000);
+    got = await page.evaluate(() => [0, 1, 2].map((i) => window.cm.getLine(i)));
+    check(results, "grn in JavaScript runs Monaco's rename", same(got, ["let sum = 1;", JS[1], "sum += 2;"]), JSON.stringify(got));
     await page.evaluate(() => monaco.editor.setModelLanguage(window.cm.editor.getModel(), "python"));
     await page.waitForTimeout(1000);
     await page.evaluate(() => (window.cm.editor.getAction = () => null));
@@ -379,6 +411,34 @@ async function runConfig(browser, base, cfg) {
     await page.evaluate(() => window.setText(""));
     const got = await play(page, [], null, "ia<Esc>ob<Esc>oc<Esc>g;g;g;g;g,");
     check(results, "the page emptying the buffer empties the change list", same(got.cursor, [1, 0]), JSON.stringify(got.cursor));
+  }
+  if (cfg.found) {
+    // An error on the cursor's line, the way each editor keeps one; CodeMirror 6 offers none to read.
+    await play(page, ["x = (", "y = 1"], [0, 1], "<Esc>");
+    const kind = await page.evaluate(() => {
+      const { cm } = window;
+      if (cm.editor) {
+        monaco.editor.setModelMarkers(cm.editor.getModel(), "test", [{ startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 6, message: "boom here", severity: 8 }]);
+        return "monaco";
+      }
+      if (cm.ace) return cm.ace.session.setAnnotations([{ row: 0, column: 0, text: "boom here", type: "error" }]), "ace";
+      if (cm.cm6) return "cm6";
+      cm.setOption("lint", { getAnnotations: () => [{ from: CodeMirror.Pos(0, 0), to: CodeMirror.Pos(0, 5), message: "boom here", severity: "error" }], delay: 0 });
+      return "cm5";
+    });
+    await page.waitForTimeout(600);
+    for (const key of "gh") await page.keyboard.press(key);
+    await page.waitForTimeout(1000);
+    const shown = await page.evaluate(() => document.body.innerText);
+    const want = { monaco: "boom here", ace: "error: boom here", cm5: "error: boom here", cm6: "No error on this line" }[kind];
+    check(results, "gh shows the error at the cursor", shown.includes(want), `${kind}: ${JSON.stringify(want)} not shown`);
+    await page.evaluate(() => {
+      const { cm } = window;
+      if (cm.editor) monaco.editor.setModelMarkers(cm.editor.getModel(), "test", []);
+      else if (cm.ace) cm.ace.session.clearAnnotations();
+      else if (!cm.cm6) cm.setOption("lint", false);
+    });
+    await page.keyboard.press("Escape");
   }
   if (cfg.found && cfg.host === "codemirror6") {
     await play(page, ["fresh_", "fresh_count"], [0, 0], "A");
