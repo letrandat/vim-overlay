@@ -53,6 +53,8 @@ const NESTED = "f((a) + (b) + (c) + (d) + (e) + (g) + x)";
 const ABC = ["a", "b", "c", "d", "e"];
 const FRESH = ["fresh = 0", "fresh_", "fresh_count += 1", "x = fresh_total"];
 const withLine = (lines, i, text) => lines.map((l, j) => (j === i ? text : l));
+const CODE = ["def f():", "    a = 1", "", "    b = 2", "x"];
+const lead = (prefix, lines, ...idx) => lines.map((l, i) => (idx.includes(i) ? prefix + l : l));
 
 // [name, lines, cursor, keys, expect]
 const SCENARIOS = [
@@ -118,6 +120,21 @@ const SCENARIOS = [
   ["ci( before a closing paren after a nested pair", CALL, [1, 33], "ci(x<Esc>", { lines: withLine(CALL, 1, "    stack.append(x)") }],
   ["di( past more than ten parens", [NESTED], [0, 38], "di(", { lines: ["f()"] }],
   ["da( on a closing paren after a nested pair", CALL, [1, 34], "da(", { lines: withLine(CALL, 1, "    stack.append") }],
+  ["gcc comments the line and keeps the cursor", CODE, [1, 6], "gcc", { lines: withLine(CODE, 1, "    # a = 1"), cursor: [1, 6], mode: "normal" }],
+  ["gcj comments two lines at the smaller indent", CODE, [0, 2], "gcj", { lines: lead("# ", CODE, 0, 1), cursor: [0, 2] }],
+  ["gck goes to the start of the upper line", CODE, [3, 6], "gck", { lines: withLine(CODE, 3, "    # b = 2"), cursor: [2, 0] }],
+  ["gc2j leaves a blank line blank", CODE, [1, 0], "gc2j", { lines: ["def f():", "    # a = 1", "", "    # b = 2", "x"] }],
+  ["3gcc comments three lines", CODE, [0, 0], "3gcc", { lines: ["# def f():", "#     a = 1", "", "    b = 2", "x"] }],
+  ["gcip comments the paragraph", CODE, [0, 0], "gcip", { lines: lead("# ", CODE, 0, 1) }],
+  ["gcc twice restores the line", CODE, [1, 6], "gccgcc", { lines: CODE }],
+  ["gcc uncomments without a space after the token", ["    #a = 1"], [0, 0], "gcc", { lines: ["    a = 1"] }],
+  ["gcj uncomments when every line is commented", ["# a", "    # b"], [0, 0], "gcj", { lines: ["a", "    b"] }],
+  ["gcj comments a mix of lines again", ["# a", "b"], [0, 0], "gcj", { lines: ["# # a", "# b"] }],
+  ["gcj twice keeps mixed tab and space indents", ["\talpha()", "    beta()"], [0, 0], "gcjgcj", { lines: ["\talpha()", "    beta()"] }],
+  ["dot repeats gcc", CODE, [0, 0], "gccj.", { lines: ["# def f():", "    # a = 1", "", "    b = 2", "x"] }],
+  ["u undoes gcj", CODE, [0, 0], "gcju", { lines: CODE }],
+  ["Visual gc comments the selected lines", CODE, [3, 4], "Vjgc", { lines: lead("# ", CODE, 3, 4), cursor: [3, 0], mode: "normal" }],
+  ["characterwise Visual gc comments whole lines", CODE, [0, 2], "vjgc", { lines: lead("# ", CODE, 0, 1), cursor: [0, 2] }],
 ];
 
 // Undo after Insert mode with completion, where the host undoes a typed insert as one step.
@@ -263,7 +280,7 @@ function check(results, name, ok, detail) {
 }
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const installed = (page) => page.evaluate(() => window.calls);
-const ONCE = { defineMotion: 3, defineAction: 1, mapCommand: 11, map: 1 };
+const ONCE = { defineMotion: 3, defineAction: 1, defineOperator: 1, mapCommand: 12, map: 1 };
 
 async function runConfig(browser, base, cfg) {
   const results = [];
@@ -278,7 +295,7 @@ async function runConfig(browser, base, cfg) {
   const page = await openPage(browser, url, true);
   await page.waitForTimeout(2500);
   const calls = await installed(page);
-  check(results, cfg.found ? "features installed" : "host finds nothing", same(calls, cfg.found ? ONCE : { defineMotion: 0, defineAction: 0, mapCommand: 0, map: 0 }), JSON.stringify(calls));
+  check(results, cfg.found ? "features installed" : "host finds nothing", same(calls, cfg.found ? ONCE : { defineMotion: 0, defineAction: 0, defineOperator: 0, mapCommand: 0, map: 0 }), JSON.stringify(calls));
 
   if (cfg.found && cfg.page.startsWith("monaco")) {
     // Before the scenarios: text they type opens Monaco's own suggest widget.
@@ -309,6 +326,20 @@ async function runConfig(browser, base, cfg) {
       return value;
     });
     check(results, "dii in a document that starts at line 10", text === "tail", JSON.stringify(text));
+  }
+  if (cfg.found && cfg.page.startsWith("monaco")) {
+    // The token follows the model's language, with and without Monaco's own toggle.
+    // Monaco loads a language's comment settings a moment after the model switches to it.
+    await page.evaluate(() => monaco.editor.setModelLanguage(window.cm.editor.getModel(), "javascript"));
+    await page.waitForTimeout(1000);
+    let got = await play(page, ["a"], [0, 0], "gcc");
+    check(results, "gcc in JavaScript uses //", same(got.lines, ["// a"]), JSON.stringify(got.lines));
+    await page.evaluate(() => monaco.editor.setModelLanguage(window.cm.editor.getModel(), "python"));
+    await page.waitForTimeout(1000);
+    await page.evaluate(() => (window.cm.editor.getAction = () => null));
+    got = await play(page, ["    a", "b"], [0, 0], "gcjgcc");
+    await page.evaluate(() => delete window.cm.editor.getAction);
+    check(results, "gc without Monaco's toggle uses the language's token", same(got.lines, ["    a", "# b"]), JSON.stringify(got.lines));
   }
   if (cfg.found && cfg.host === "codemirror6") {
     await play(page, ["fresh_", "fresh_count"], [0, 0], "A");
