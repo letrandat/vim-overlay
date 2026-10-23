@@ -30,7 +30,8 @@
       block = mode.blockComment && [mode.blockComment.start, mode.blockComment.end];
     } else if (cm.editor?.getModel) {
       const model = cm.editor.getModel();
-      const id = model.getLanguageId?.() ?? model.getModeId?.(); // getModeId before Monaco 0.34
+      // getModeId before Monaco 0.34. LeetCode names its languages python3 and the like.
+      const id = (model.getLanguageId?.() ?? model.getModeId?.()).replace(/\d+$/, "");
       lineToken = MONACO_LINE[id];
       block = MONACO_BLOCK[id];
     } else if (cm.getModeAt) {
