@@ -25,6 +25,7 @@
         "src/features/comment.js",
         "src/features/change-list.js",
         "src/features/relative-numbers.js",
+        "src/features/rename.js",
         "src/main.js"
       ]
     }
