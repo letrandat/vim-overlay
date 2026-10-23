@@ -38,13 +38,15 @@
   import { vim, Vim, getCM } from "@replit/codemirror-vim";
 
   track(Vim);
+  // Python's comment token, as @codemirror/lang-python declares it.
+  const python = EditorState.languageData.of(() => [{ commentTokens: { line: "#" } }]);
   let view;
   const readOnly = new Compartment();
   window.setReadOnly = (on) => view.dispatch({ effects: readOnly.reconfigure(EditorState.readOnly.of(on)) });
   window.setText = (text) => window.cm.setValue(text);
   window.remount = () => {
     view?.destroy();
-    view = new EditorView({ parent: document.getElementById("editor"), extensions: [vim(), history(), indentUnit.of("    "), readOnly.of([])] });
+    view = new EditorView({ parent: document.getElementById("editor"), extensions: [vim(), history(), indentUnit.of("    "), python, readOnly.of([])] });
     if (new URLSearchParams(location.search).get("expose")) getCM(view).constructor.Vim = Vim;
     watch(getCM(view));
   };

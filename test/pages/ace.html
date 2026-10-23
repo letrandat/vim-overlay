@@ -4,6 +4,7 @@
 <script src="common.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/ace-builds@1.44.0/src-noconflict/ace.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/ace-builds@1.44.0/src-noconflict/keybinding-vim.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/ace-builds@1.44.0/src-noconflict/mode-python.js"></script>
 <script>
   const vimModule = ace.require("ace/keyboard/vim");
   track(vimModule.Vim);
@@ -14,7 +15,7 @@
     const el = document.createElement("div");
     el.style.cssText = "width: 900px; height: 500px";
     document.getElementById("host").append(el);
-    editor = ace.edit(el, { tabSize: 4, useSoftTabs: true });
+    editor = ace.edit(el, { mode: "ace/mode/python", tabSize: 4, useSoftTabs: true });
     editor.setKeyboardHandler(vimModule.handler);
     watch(editor.state.cm);
   };

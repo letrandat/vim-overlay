@@ -22,6 +22,7 @@
         "src/features/complete.js",
         "src/features/move-lines.js",
         "src/features/bracket-objects.js",
+        "src/features/comment.js",
         "src/main.js"
       ]
     }

@@ -8,13 +8,14 @@
 <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.21/addon/dialog/dialog.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.21/addon/edit/matchbrackets.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.21/keymap/vim.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.21/mode/python/python.js"></script>
 <script>
   track(CodeMirror.Vim);
   let editor;
   window.setText = (text) => editor.setValue(text);
   window.remount = () => {
     editor?.getWrapperElement().remove();
-    editor = CodeMirror(document.getElementById("editor"), { keyMap: "vim", tabSize: 4, indentUnit: 4 });
+    editor = CodeMirror(document.getElementById("editor"), { keyMap: "vim", mode: "python", tabSize: 4, indentUnit: 4 });
     watch(editor);
   };
   remount();
