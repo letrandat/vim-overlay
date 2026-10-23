@@ -42,11 +42,13 @@
     }, true);
   }
 
-  // Whether text is the whole buffer. monaco-vim's adapter has no getValue.
+  // Whether text is the whole buffer. monaco-vim's adapter has no getValue, and a CodeMirror 5
+  // document may start at a line other than 0.
   function wholeBuffer(cm, text) {
-    const count = cm.lastLine() + 1;
+    const first = cm.firstLine?.() ?? 0;
+    const count = cm.lastLine() - first + 1;
     if (text.split("\n").length !== count) return false;
-    return Array.from({ length: count }, (_, i) => cm.getLine(i)).join("\n") === text;
+    return Array.from({ length: count }, (_, i) => cm.getLine(first + i)).join("\n") === text;
   }
 
   // Where Vim remembers a change: the last inserted character, or where text was deleted.

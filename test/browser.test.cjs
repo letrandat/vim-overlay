@@ -350,6 +350,18 @@ async function runConfig(browser, base, cfg) {
       return value;
     });
     check(results, "dii in a document that starts at line 10", text === "tail", JSON.stringify(text));
+    await page.evaluate(() => {
+      window.savedDoc = window.cm.swapDoc(CodeMirror.Doc("total = 0\ntotal += subtotal", null, 10));
+      window.cm.setCursor({ line: 11, ch: 0 });
+      window.cm.focus();
+    });
+    for (const key of ["g", "r", "n", "s", "u", "m", "Enter"]) await page.keyboard.press(key);
+    const renamed = await page.evaluate(() => {
+      const result = { value: window.cm.getValue(), line: window.cm.getCursor().line };
+      window.cm.swapDoc(window.savedDoc);
+      return result;
+    });
+    check(results, "grn in a document that starts at line 10", same(renamed, { value: "sum = 0\nsum += subtotal", line: 11 }), JSON.stringify(renamed));
   }
   if (cfg.found && cfg.page.startsWith("monaco")) {
     // The token follows the model's language, with and without Monaco's own toggle.
