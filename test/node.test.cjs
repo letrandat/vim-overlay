@@ -35,6 +35,7 @@ function load({ before = () => {}, only } = {}) {
     document: { querySelector: () => null, querySelectorAll: () => [] },
     console: { ...console, warn: (...a) => warnings.push(a.join(" ")) },
     setInterval: (fn) => timers.push(fn),
+    addEventListener: () => {},
   };
   sandbox.window = sandbox;
   vm.createContext(sandbox);

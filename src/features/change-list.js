@@ -30,6 +30,18 @@
     };
   }
 
+  // Whether this task holds a trusted key, paste, cut, drop or input event. A page that loads
+  // code, or a test that sets it, changes the buffer outside one, so its change is not a
+  // position: one that replaces the whole buffer empties the list, and any other is skipped.
+  let userInput = false;
+  for (const type of ["keydown", "beforeinput", "paste", "cut", "drop", "compositionend"]) {
+    addEventListener(type, (e) => {
+      if (!e.isTrusted || userInput) return;
+      userInput = true;
+      setTimeout(() => (userInput = false));
+    }, true);
+  }
+
   // Whether text is the whole buffer. monaco-vim's adapter has no getValue.
   function wholeBuffer(cm, text) {
     const count = cm.lastLine() + 1;
@@ -37,13 +49,19 @@
     return Array.from({ length: count }, (_, i) => cm.getLine(i)).join("\n") === text;
   }
 
-  function record(cm, l, change) {
-    // A change that replaced the whole buffer, as a page does when it loads code, starts over.
-    for (let c = change; c; c = c.next) if (Array.isArray(c.text) && wholeBuffer(cm, c.text.join("\n"))) return clear(l);
+  // Where Vim remembers a change: the last inserted character, or where text was deleted.
+  // A linewise insert at column 0 ends with a newline; its last character is on the line before.
+  function changePos(line, ch, text) {
+    if (!text) return { line, ch };
+    const lines = text.split(/\r?\n/);
+    if (lines.length > 1 && ch === 0 && lines.at(-1) === "") lines.pop();
+    const lastLength = lines.at(-1).length;
+    return lines.length === 1 ? { line, ch: Math.max(0, ch + lastLength - 1) } : { line: line + lines.length - 1, ch: Math.max(0, lastLength - 1) };
+  }
+
+  function record(cm, l, pos, whole) {
+    if (!userInput) return whole && clear(l);
     const vim = cm.state.vim;
-    const cur = cm.getCursor();
-    // In Insert mode the cursor sits after the typed text; Vim remembers the last typed character.
-    const pos = { line: cur.line, ch: vim?.insertMode && cur.ch > 0 ? cur.ch - 1 : cur.ch };
     const last = l.marks.at(-1)?.find();
     if (last && (l.merge || (last.line === pos.line && Math.abs(last.ch - pos.ch) < 79))) l.marks.pop().clear();
     l.marks.push(bookmark(cm, pos));
@@ -52,13 +70,42 @@
     l.merge = !!vim?.insertMode;
   }
 
+  // Each edit's own position, when it happens, so a macro that edits several places in one
+  // key records each of them. The adapters' change events carry no positions, so this reads
+  // each editor's own.
+  function watch(cm, l) {
+    const onChange = (pos, whole) => record(cm, l, pos, whole);
+    if (cm.editor?.onDidChangeModelContent) {
+      cm.editor.onDidChangeModelContent((e) => {
+        for (const c of e.changes) onChange(changePos(c.range.startLineNumber - 1, c.range.startColumn - 1, c.text), e.isFlush);
+      });
+      cm.editor.onDidChangeModel(() => clear(l));
+    } else if (cm.ace) {
+      cm.ace.on("change", (d) => {
+        const pos = d.action === "insert" ? changePos(d.start.row, d.start.column, d.lines.join("\n")) : { line: d.start.row, ch: d.start.column };
+        onChange(pos, d.action === "insert" && wholeBuffer(cm, d.lines.join("\n")));
+      });
+    } else if (cm.cm6) {
+      // The CodeMirror 6 adapter signals once per operation, with its changes as a list, and
+      // keeps where the last of them ended.
+      cm.on("change", (...args) => {
+        let c = args.find((a) => a?.text);
+        while (c?.next) c = c.next;
+        const text = (c?.text ?? []).join("\n");
+        const start = cm.posFromIndex(Math.max(0, (cm.$lastChangeEndOffset ?? 0) - text.length));
+        onChange(changePos(start.line, start.ch, text), wholeBuffer(cm, text));
+      });
+    } else {
+      cm.on("change", (_cm, c) => onChange(changePos(c.from.line, c.from.ch, c.text.join("\n")), c.origin === "setValue"));
+    }
+  }
+
   function list(cm) {
     let l = lists.get(cm);
     if (!l) {
       l = { marks: [], index: 0, merge: false };
       lists.set(cm, l);
-      // After the change, once the key or edit that made it has placed the cursor.
-      cm.on("change", (...args) => queueMicrotask(() => record(cm, l, args.find((a) => a?.text))));
+      watch(cm, l);
       cm.on("vim-mode-change", () => (l.merge = false));
     }
     return l;

@@ -147,6 +147,8 @@ const SCENARIOS = [
   ["a position moves with lines added above it", ABC, [3, 0], "Ax<Esc>ggOn<Esc>Gg;g;", { lines: ["n", "a", "b", "c", "dx", "e"], cursor: [4, 1] }],
   ["backtick dot goes to the last change", ABC, [0, 0], "Ax<Esc>3GAy<Esc>G`.", { cursor: [2, 1] }],
   ["quote dot goes to the line of the last change", ["a", "  b", "c"], [0, 0], "jAy<Esc>G'.", { cursor: [1, 2] }],
+  ["g; after a macro goes to the macro's last edit", ABC, [0, 0], "qqAx<Esc>jjq@qg;", { lines: ["ax", "b", "cx", "d", "e"], cursor: [2, 1] }],
+  ["typing into an empty buffer is a change", [""], [0, 0], "ix<Esc>oy<Esc>g;g;", { lines: ["x", "y"], cursor: [0, 0] }],
   ["g; with no change does nothing", ABC, [3, 0], "g;", { cursor: [3, 0], mode: "normal" }],
 ];
 
