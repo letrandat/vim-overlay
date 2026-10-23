@@ -130,6 +130,7 @@ const SCENARIOS = [
   ["gcc uncomments without a space after the token", ["    #a = 1"], [0, 0], "gcc", { lines: ["    a = 1"] }],
   ["gcj uncomments when every line is commented", ["# a", "    # b"], [0, 0], "gcj", { lines: ["a", "    b"] }],
   ["gcj comments a mix of lines again", ["# a", "b"], [0, 0], "gcj", { lines: ["# # a", "# b"] }],
+  ["gcj twice keeps mixed tab and space indents", ["\talpha()", "    beta()"], [0, 0], "gcjgcj", { lines: ["\talpha()", "    beta()"] }],
   ["dot repeats gcc", CODE, [0, 0], "gccj.", { lines: ["# def f():", "    # a = 1", "", "    b = 2", "x"] }],
   ["u undoes gcj", CODE, [0, 0], "gcju", { lines: CODE }],
   ["Visual gc comments the selected lines", CODE, [3, 4], "Vjgc", { lines: lead("# ", CODE, 3, 4), cursor: [3, 0], mode: "normal" }],

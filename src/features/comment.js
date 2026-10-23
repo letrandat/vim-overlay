@@ -44,7 +44,8 @@
     return { left: "// ", right: "" };
   }
 
-  // Neovim's toggle_lines (runtime/lua/vim/_comment.lua), except that blank lines stay blank.
+  // Neovim's toggle_lines (runtime/lua/vim/_comment.lua), except that blank lines stay blank
+  // and each line keeps its own indentation.
   function toggle(text, { left, right }) {
     const [l, r] = [escape(left.trim()), escape(right.trim())];
     const filled = text.filter((s) => !blank(s));
@@ -56,8 +57,10 @@
         return !m ? s : blank(m[2]) ? m[2] : m[1] + m[2] + m[3];
       });
     }
-    const indent = filled.map((s) => s.match(/^\s*/)[0]).reduce((a, b) => (b.length < a.length ? b : a));
-    return text.map((s) => (blank(s) ? s : indent + left + s.slice(indent.length) + right));
+    // Insert at the smallest indent's length into each line's own whitespace, so a line
+    // indented with tabs where another uses spaces comes back unchanged when uncommented.
+    const at = Math.min(...filled.map((s) => s.match(/^\s*/)[0].length));
+    return text.map((s) => (blank(s) ? s : s.slice(0, at) + left + s.slice(at) + right));
   }
 
   // Monaco's own toggle knows the comment of every language the page registers.
