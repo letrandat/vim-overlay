@@ -55,6 +55,7 @@ const FRESH = ["fresh = 0", "fresh_", "fresh_count += 1", "x = fresh_total"];
 const withLine = (lines, i, text) => lines.map((l, j) => (j === i ? text : l));
 const RENAME = ["total = 0", "for x in xs:", "    total += x", "print(total, subtotal)"];
 const CODE = ["def f():", "    a = 1", "", "    b = 2", "x"];
+const NEST = ["q = \"a = 'x' + 1\""];
 const lead = (prefix, lines, ...idx) => lines.map((l, i) => (idx.includes(i) ? prefix + l : l));
 
 // [name, lines, cursor, keys, expect]
@@ -121,6 +122,26 @@ const SCENARIOS = [
   ["ci( before a closing paren after a nested pair", CALL, [1, 33], "ci(x<Esc>", { lines: withLine(CALL, 1, "    stack.append(x)") }],
   ["di( past more than ten parens", [NESTED], [0, 38], "di(", { lines: ["f()"] }],
   ["da( on a closing paren after a nested pair", CALL, [1, 34], "da(", { lines: withLine(CALL, 1, "    stack.append") }],
+  ["ciq changes inside double quotes", ['    s = "hi there"'], [0, 12], "ciqyo<Esc>", { lines: ['    s = "yo"'], mode: "normal" }],
+  ["diq deletes inside single quotes", ["x = 'abc'"], [0, 6], "diq", { lines: ["x = ''"] }],
+  ["daq deletes a backtick string with its quotes", ["x = `a ${b}`"], [0, 5], "daq", { lines: ["x = "] }],
+  ["yiq yanks inside the quotes", ['s = "hi there"'], [0, 6], "yiq", { register: ["hi there", false] }],
+  ["diq before a string takes the next one", ['print("hi")'], [0, 0], "diq", { lines: ['print("")'] }],
+  ["diq takes the innermost of nested quotes", NEST, [0, 10], "diq", { lines: ["q = \"a = '' + 1\""] }],
+  ["d2iq takes the inner string with its quotes", NEST, [0, 10], "d2iq", { lines: ['q = "a =  + 1"'] }],
+  ["an apostrophe before a string is not a quote", ['// it\'s "y"'], [0, 9], "diq", { lines: ['// it\'s ""'] }],
+  ["an apostrophe inside a string is not a quote", ['"it\'s" + x'], [0, 2], "diq", { lines: ['"" + x'] }],
+  ["an escaped quote does not end the string", ['s = "a\\"b"'], [0, 5], "diq", { lines: ['s = ""'] }],
+  ["diq on a closing quote takes its string", ['"a" "b"'], [0, 2], "diq", { lines: ['"" "b"'] }],
+  ["diq between strings takes the next one", ['"a" "b"'], [0, 3], "diq", { lines: ['"a" ""'] }],
+  ["viq selects inside the quotes", NEST, [0, 10], "viqd", { lines: ["q = \"a = '' + 1\""] }],
+  ["viq iq adds the quotes", NEST, [0, 10], "viqiqd", { lines: ['q = "a =  + 1"'] }],
+  ["viq iq iq takes the enclosing string", NEST, [0, 10], "viqiqiqd", { lines: ['q = ""'] }],
+  ["vaq aq takes the enclosing string with its quotes", NEST, [0, 10], "vaqaqd", { lines: ["q = "] }],
+  ["Viq selects characterwise", ['s = "hi"'], [0, 5], "Viq", { mode: "visual", lastMode: "visual" }],
+  ["dot repeats diq", ["a = 'x', b = 'y'"], [0, 5], "diq$.", { lines: ["a = '', b = ''"] }],
+  ["u undoes diq", NEST, [0, 10], "diqu", { lines: NEST }],
+  ["diq without quotes does nothing", ["x = 1"], [0, 0], "diqx", { lines: [" = 1"], mode: "normal" }],
   ["gcc comments the line and keeps the cursor", CODE, [1, 6], "gcc", { lines: withLine(CODE, 1, "    # a = 1"), cursor: [1, 6], mode: "normal" }],
   ["gcj comments two lines at the smaller indent", CODE, [0, 2], "gcj", { lines: lead("# ", CODE, 0, 1), cursor: [0, 2] }],
   ["gck goes to the start of the upper line", CODE, [3, 6], "gck", { lines: withLine(CODE, 3, "    # b = 2"), cursor: [2, 0] }],
@@ -304,7 +325,7 @@ function check(results, name, ok, detail) {
 }
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const installed = (page) => page.evaluate(() => window.calls);
-const ONCE = { defineMotion: 4, defineAction: 3, defineOperator: 1, mapCommand: 18, map: 1 };
+const ONCE = { defineMotion: 5, defineAction: 3, defineOperator: 1, mapCommand: 20, map: 1 };
 
 async function runConfig(browser, base, cfg) {
   const results = [];
