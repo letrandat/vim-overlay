@@ -37,6 +37,43 @@ async function after({ page, cfg, check, play }) {
   got = await play(["    a", "b"], [0, 0], "gcjgcc");
   await page.evaluate(() => delete window.cm.editor.getAction);
   check("gc without Monaco's toggle uses the language's token", same(got.lines, ["    a", "# b"]), JSON.stringify(got.lines));
+
+  // A detached Monaco adapter cannot dispatch keys, so call its installed operator.
+  const detached = await page.evaluate(() => {
+    const { cm } = window;
+    const model = monaco.editor.createModel(cm.editor.getValue(), "python");
+    cm.editor.setModel(model);
+    const text = model.getValue();
+    let error;
+    cm.editor.setModel(null);
+    try {
+      window.testOperators.vimOverlayComment(cm, {}, [{ anchor: { line: 0, ch: 0 }, head: { line: 0, ch: 1 } }], { line: 0, ch: 0 });
+    } catch (e) {
+      error = e.message;
+    } finally {
+      cm.editor.setModel(model);
+    }
+    return { error, unchanged: model.getValue() === text };
+  });
+  check("gc with no Monaco model does nothing", !detached.error && detached.unchanged, JSON.stringify(detached));
+
+  await play(["a"], [0, 0], "<Esc>");
+  const unknown = await page.evaluate(() => {
+    const { cm } = window;
+    const adapter = Object.assign(Object.create(cm), {
+      editor: { getModel: () => ({}) },
+      getLine: cm.getLine.bind(cm),
+      replaceRange: cm.replaceRange.bind(cm),
+    });
+    let error;
+    try {
+      window.testOperators.vimOverlayComment(adapter, {}, [{ anchor: { line: 0, ch: 0 }, head: { line: 0, ch: 1 } }], { line: 0, ch: 0 });
+    } catch (e) {
+      error = e.message;
+    }
+    return { error, text: cm.getLine(0) };
+  });
+  check("gc without Monaco language methods uses //", !unknown.error && unknown.text === "// a", JSON.stringify(unknown));
 }
 
 module.exports = { scenarios, after };

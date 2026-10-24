@@ -33,8 +33,7 @@ function commentParts(cm: Adapter, line: number) {
   } else if (isMonaco(cm)) {
     const model = cm.editor!.getModel();
     // getModeId before Monaco 0.34. LeetCode names its languages python3 and the like.
-    // Keep the existing live-model/language assumption; this conversion does not change detached-model behavior.
-    const id = (model!.getLanguageId?.() ?? model!.getModeId?.())!.replace(/\d+$/, "");
+    const id = (model?.getLanguageId?.() ?? model?.getModeId?.() ?? "").replace(/\d+$/, "");
     lineToken = MONACO_LINE[id];
     block = MONACO_BLOCK[id];
   } else if (cm.getModeAt) {
@@ -77,6 +76,7 @@ function monacoToggle(cm: Adapter, top: number, bottom: number) {
 }
 
 const commentOperator: Operator = (cm, _args, ranges, oldAnchor) => {
+  if (isMonaco(cm) && !cm.editor.getModel()) return;
   const vim = cm.state.vim;
   let top = Infinity, bottom = -Infinity;
   for (const { anchor, head } of ranges) {
