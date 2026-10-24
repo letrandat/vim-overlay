@@ -1,4 +1,6 @@
 import type { Adapter, Motion, VimApi } from "../vim-api.ts";
+import { bufferLines } from "../editor/lines.ts";
+import { setVisualSubmode } from "../vim/visual.ts";
 
 // Indent text objects ii, ai, iI, aI.
 // Port of vim-indent-object by Michael Smith (MIT): https://github.com/michaeljsmith/vim-indent-object
@@ -90,10 +92,7 @@ function findIndentBlock(lines: string[], top: number, bottom: number,
 // vim.js motion: (cm, head, motionArgs, vim) -> [anchor, head]. cm is the
 // host's CodeMirror-compatible adapter.
 const indentObjectMotion: Motion<{ inner: boolean; below: boolean }> = (cm, head, args, vim) => {
-  // A CodeMirror 5 document can start at a line other than 0; findIndentBlock counts from 0.
-  const first = cm.firstLine?.() ?? 0;
-  const lines = [];
-  for (let i = first; i <= cm.lastLine(); i++) lines.push(cm.getLine(i));
+  const { first, lines } = bufferLines(cm);
   const visual = vim.visualMode;
   const from = (visual ? vim.sel.anchor.line : head.line) - first;
   const to = (visual ? vim.sel.head.line : head.line) - first;
@@ -112,12 +111,7 @@ const indentObjectMotion: Motion<{ inner: boolean; below: boolean }> = (cm, head
   });
   lastRange.set(cm, [start, end]);
   args.linewise = true; // operators act on whole lines, as with the built-in `ip`
-  if (visual && (!vim.visualLine || vim.visualBlock)) {
-    vim.visualLine = true;
-    vim.visualBlock = false;
-    // Every adapter class has the static signal() that vim.js itself uses for mode changes.
-    cm.constructor.signal?.(cm, "vim-mode-change", { mode: "visual", subMode: "linewise" });
-  }
+  if (visual) setVisualSubmode(cm, vim, true);
   return [{ line: start + first, ch: 0 }, { line: end + first, ch: 0 }];
 };
 

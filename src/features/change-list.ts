@@ -1,4 +1,6 @@
 import type { Adapter, Bookmark, Change, Motion, Pos, VimApi } from "../vim-api.ts";
+import { readLines } from "../editor/lines.ts";
+import { beforeKey } from "../vim/keys.ts";
 
 // g; and g, go to older and newer change positions, as in Vim and Zed, and `. and '. go to
 // the newest. vim.js's own `. reads CodeMirror 5's edit history, which monaco-vim's adapter
@@ -50,7 +52,7 @@ function wholeBuffer(cm: Adapter, text: string) {
   const first = cm.firstLine?.() ?? 0;
   const count = cm.lastLine() - first + 1;
   if (text.split("\n").length !== count) return false;
-  return Array.from({ length: count }, (_, i) => cm.getLine(first + i)).join("\n") === text;
+  return readLines(cm, first, first + count - 1).join("\n") === text;
 }
 
 // Where Vim remembers a change: the last inserted character, or where text was deleted.
@@ -133,11 +135,9 @@ const changeListMotion: Motion<{ newest?: boolean; forward?: boolean }> = (cm, h
 
 export const install = (Vim: VimApi) => {
   // Start each editor's list at its first key, before any change the list should hold.
-  const findKey = Vim.findKey;
-  Vim.findKey = function (cm, ...rest) {
+  beforeKey(Vim, (cm) => {
     if ((cm as Partial<Adapter> | undefined)?.setBookmark) list(cm);
-    return findKey.call(this, cm, ...rest);
-  };
+  });
   Vim.defineMotion(MOTION, changeListMotion);
   Vim.mapCommand("g;", "motion", MOTION, { forward: false });
   Vim.mapCommand("g,", "motion", MOTION, { forward: true });

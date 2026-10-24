@@ -1,4 +1,5 @@
 import type { Adapter, VimApi } from "../vim-api.ts";
+import { bufferLines } from "../editor/lines.ts";
 
 // Insert-mode keyword completion from words in the buffer, like Vim's i_CTRL-N
 // and i_CTRL-P, without the popup menu: each press puts the next match in place,
@@ -16,8 +17,10 @@ const watched = new WeakSet<Adapter>();
 // wrapping around the buffer as Vim does.
 function candidates(cm: Adapter, line: number, start: number, prefix: string, forward: boolean) {
   const before: string[] = [], after: string[] = [];
-  for (let l = cm.firstLine?.() ?? 0; l <= cm.lastLine(); l++) {
-    for (const m of cm.getLine(l).matchAll(WORD)) {
+  const { first, lines } = bufferLines(cm);
+  for (const [i, text] of lines.entries()) {
+    const l = first + i;
+    for (const m of text.matchAll(WORD)) {
       if (l === line && m.index === start) continue; // the word being completed
       (l < line || (l === line && m.index < start) ? before : after).push(m[0]);
     }

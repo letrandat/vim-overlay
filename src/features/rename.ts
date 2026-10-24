@@ -1,4 +1,5 @@
 import type { Adapter, Pos, VimApi } from "../vim-api.ts";
+import { bufferLines } from "../editor/lines.ts";
 
 // grn renames the word under the cursor, as Zed's and Neovim's grn do. Where Monaco has a rename
 // provider for the language (JavaScript and TypeScript in stock Monaco), it opens Monaco's own
@@ -15,12 +16,6 @@ function wordAt(cm: Adapter, { line, ch }: Pos): Target | null {
     if (m.index + m[0].length > ch) return { word: m[0], line, start: m.index };
   }
   return null;
-}
-
-// The buffer's lines, from its first, which is not 0 in every CodeMirror 5 document.
-function bufferLines(cm: Adapter) {
-  const first = cm.firstLine?.() ?? 0;
-  return { first, lines: Array.from({ length: cm.lastLine() - first + 1 }, (_, i) => cm.getLine(first + i)) };
 }
 
 function rename(cm: Adapter, target: Target, name: string) {

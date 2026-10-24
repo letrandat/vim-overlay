@@ -1,4 +1,5 @@
 import type { Decoration, MonacoEditor, VimApi } from "../vim-api.ts";
+import { beforeKey } from "../vim/keys.ts";
 
 // A column of relative line numbers between Monaco's own numbers and the code, so a count for
 // j or k reads off the screen while anyone watching a shared screen still sees the usual
@@ -60,9 +61,7 @@ function show(editor: MonacoEditor) {
 }
 
 export const install = (Vim: VimApi) => {
-  const findKey = Vim.findKey;
-  Vim.findKey = function (cm, ...rest) {
+  beforeKey(Vim, (cm) => {
     if (cm?.editor?.deltaDecorations && (cm.editor as Partial<MonacoEditor>).onDidChangeCursorPosition) show(cm.editor);
-    return findKey.call(this, cm, ...rest);
-  };
+  });
 };

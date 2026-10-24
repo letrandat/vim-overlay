@@ -88,6 +88,8 @@ src/runtime.ts         asks the hosts for Vim objects once a second and installs
 src/vim-api.ts         the Vim API and adapter types used by the extension
 src/hosts/             one module per way of finding a page's Vim object
 src/features/          one module per feature
+src/editor/            shared buffer reads and adapter checks
+src/vim/               shared Visual-mode signalling and the findKey hook
 test/                  see Tests
 ```
 
