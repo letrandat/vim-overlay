@@ -1,4 +1,5 @@
 import type { Adapter, Motion, Selection, VimApi } from "../vim-api.ts";
+import { setVisualSubmode } from "../vim/visual.ts";
 
 // Text objects iq and aq: the quotes around the cursor, whichever of " ' ` they are, as
 // mini.ai's and Zed's q. Like Vim's i", they look only at the cursor's line.
@@ -69,10 +70,7 @@ const quoteObjectMotion: Motion<{ inner: boolean }> = (cm, head, args, vim) => {
   if (!visual) return [{ line: cur.line, ch: start }, { line: cur.line, ch: end }];
   if (start === end) return null; // nothing between the quotes to select
   lastRange.set(cm, [vim.sel, start, end - 1]);
-  if (vim.visualLine || vim.visualBlock) {
-    vim.visualLine = vim.visualBlock = false;
-    cm.constructor.signal?.(cm, "vim-mode-change", { mode: "visual", subMode: "" });
-  }
+  setVisualSubmode(cm, vim, false);
   // Visual mode keeps the last character inside the selection.
   return [{ line: cur.line, ch: start }, { line: cur.line, ch: end - 1 }];
 };

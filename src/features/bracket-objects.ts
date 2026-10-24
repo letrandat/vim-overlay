@@ -1,4 +1,6 @@
 import type { Adapter, VimApi } from "../vim-api.ts";
+import { isMonaco } from "../editor/adapter.ts";
+import { beforeKey } from "../vim/keys.ts";
 
 // Fixes i( a( i[ a[ i{ a{ i< a< in monaco-vim. vim.js finds the brackets around the cursor
 // with the adapter's scanForBracket, and monaco-vim's version skips an open bracket right
@@ -30,10 +32,8 @@ const scanForBracket: NonNullable<Adapter["scanForBracket"]> = function (this: A
 };
 
 export const install = (Vim: VimApi) => {
-  const findKey = Vim.findKey;
-  Vim.findKey = function (cm, ...rest) {
+  beforeKey(Vim, (cm) => {
     // Only Monaco's adapter has an editor with a model; CodeMirror and Ace scan correctly.
-    if (cm?.editor?.getModel && cm.scanForBracket !== scanForBracket) cm.scanForBracket = scanForBracket;
-    return findKey.call(this, cm, ...rest);
-  };
+    if (isMonaco(cm) && cm.scanForBracket !== scanForBracket) cm.scanForBracket = scanForBracket;
+  });
 };

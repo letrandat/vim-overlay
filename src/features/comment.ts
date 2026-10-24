@@ -1,4 +1,6 @@
 import type { Adapter, Operator, VimApi } from "../vim-api.ts";
+import { readLines } from "../editor/lines.ts";
+import { isMonaco } from "../editor/adapter.ts";
 
 // gc{motion}, gcc and Visual gc toggle line comments, as Neovim's gc and vim-commentary
 // do: if every non-blank line is commented, uncomment them all, else comment them all at
@@ -13,7 +15,6 @@ const MONACO_LINE: Record<string, string> = {
 };
 const MONACO_BLOCK: Record<string, [string, string]> = { html: ["<!--", "-->"], xml: ["<!--", "-->"], markdown: ["<!--", "-->"], css: ["/*", "*/"] };
 
-const lines = (cm: Adapter, from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => cm.getLine(from + i));
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const blank = (s: string) => !/\S/.test(s);
 
@@ -29,7 +30,7 @@ function commentParts(cm: Adapter, line: number) {
     const mode = cm.ace.session.getMode();
     lineToken = [mode.lineCommentStart].flat()[0];
     block = mode.blockComment && [mode.blockComment.start, mode.blockComment.end];
-  } else if (cm.editor?.getModel) {
+  } else if (isMonaco(cm)) {
     const model = cm.editor!.getModel();
     // getModeId before Monaco 0.34. LeetCode names its languages python3 and the like.
     // Keep the existing live-model/language assumption; this conversion does not change detached-model behavior.
@@ -85,7 +86,7 @@ const commentOperator: Operator = (cm, _args, ranges, oldAnchor) => {
     bottom = Math.max(bottom, to.ch === 0 && to.line > from.line ? to.line - 1 : to.line);
   }
   if (!monacoToggle(cm, top, bottom)) {
-    const old = lines(cm, top, bottom);
+    const old = readLines(cm, top, bottom);
     const next = toggle(old, commentParts(cm, top));
     if (next.some((s, i) => s !== old[i])) cm.replaceRange(next.join("\n"), { line: top, ch: 0 }, { line: bottom, ch: old[old.length - 1].length });
   }

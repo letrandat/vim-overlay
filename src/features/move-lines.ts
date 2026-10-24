@@ -1,12 +1,11 @@
-import type { Adapter, Motion, VimApi } from "../vim-api.ts";
+import type { Motion, VimApi } from "../vim-api.ts";
+import { readLines } from "../editor/lines.ts";
 
 // Ctrl-J and Ctrl-K move the current line, or the lines a Visual selection
 // covers, down or up, as the nvim and Zed configs bind them. A count moves that
 // many lines. It is a motion so that vim.js moves the Visual selection with the
 // lines, as it does for any motion that returns a range.
 const MOTION = "vimOverlayMoveLines";
-
-const lines = (cm: Adapter, from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => cm.getLine(from + i));
 
 const moveLinesMotion: Motion<{ forward: boolean }> = (cm, head, args, vim, inputState) => {
   if (inputState.operator) return null; // d<C-j> and the like do nothing
@@ -16,8 +15,8 @@ const moveLinesMotion: Motion<{ forward: boolean }> = (cm, head, args, vim, inpu
   const by = args.forward ? Math.min(args.repeat, cm.lastLine() - bottom) : -Math.min(args.repeat, top - (cm.firstLine?.() ?? 0));
   if (!by) return null;
   // One edit over the moved lines and the lines they pass, so one u undoes it.
-  const moved = lines(cm, top, bottom);
-  const passed = by > 0 ? lines(cm, bottom + 1, bottom + by) : lines(cm, top + by, top - 1);
+  const moved = readLines(cm, top, bottom);
+  const passed = by > 0 ? readLines(cm, bottom + 1, bottom + by) : readLines(cm, top + by, top - 1);
   const from = Math.min(top, top + by);
   const to = Math.max(bottom, bottom + by);
   const text = (by > 0 ? [...passed, ...moved] : [...moved, ...passed]).join("\n");
