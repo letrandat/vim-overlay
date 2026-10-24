@@ -41,7 +41,7 @@ After changing a file, reload the extension, then refresh the page.
 
 ## Add or remove a feature
 
-Add one file to `src/features/` and list it in `manifest.json` under `content_scripts[0].js`, before `src/main.js`. To remove a feature, delete the file and its line.
+Add one file to `src/features/` and list it in `manifest.json` under `content_scripts[0].js`, before `src/main.js`. Its browser scenarios go in `test/browser/features/<name>.cjs`, listed in `FEATURES` in `test/browser.test.cjs`. To remove a feature, delete its files and lines.
 
 ```js
 // src/features/my-feature.js
@@ -68,7 +68,7 @@ window.vimOverlay.hosts["my-editor"] = () => [window.myEditor?.Vim].filter(Boole
 cd test && npm install && npx playwright install webkit && npm test
 ```
 
-`node.test.cjs` checks `main.js` and runs the indent range logic against `oracle.json`, which real Vim recorded with the original plugin (`npm run oracle` regenerates it). `browser.test.cjs` loads each host page in WebKit with editors from jsDelivr, injects the manifest's scripts in manifest order, types real keys, and compares built-in commands with a page that has no extension. It needs network access. Run one host with `node browser.test.cjs codemirror5`, or another browser with `BROWSER=chromium`.
+`node.test.cjs` checks `main.js` and runs the indent range logic against `oracle.json`, which real Vim recorded with the original plugin (`npm run oracle` regenerates it). `browser.test.cjs` loads each host page in WebKit with editors from jsDelivr, injects the manifest's scripts in manifest order as one script, types real keys, and compares built-in commands with a page that has no extension. `test/browser/harness.cjs` opens pages and plays keys, and each file in `test/browser/features/` holds one feature's scenarios and any checks it runs before or after them. It needs network access. Run one host with `node browser.test.cjs codemirror5`, or another browser with `BROWSER=chromium`.
 
 ## Credits and licence
 
