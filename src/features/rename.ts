@@ -1,3 +1,5 @@
+import type { Adapter, Pos, VimApi } from "../vim-api.ts";
+
 // grn renames the word under the cursor, as Zed's and Neovim's grn do. Where Monaco has a rename
 // provider for the language (JavaScript and TypeScript in stock Monaco), it opens Monaco's own
 // rename box. Elsewhere it asks for the new name in Vim's command line, with the old one
@@ -6,7 +8,9 @@ const ACTION = "vimOverlayRename";
 const WORD = "[\\p{L}\\p{N}_]";
 
 // The word at or after the cursor on its line, as * picks it.
-function wordAt(cm, { line, ch }) {
+interface Target { word: string; line: number; start: number }
+
+function wordAt(cm: Adapter, { line, ch }: Pos): Target | null {
   for (const m of cm.getLine(line).matchAll(new RegExp(`${WORD}+`, "gu"))) {
     if (m.index + m[0].length > ch) return { word: m[0], line, start: m.index };
   }
@@ -14,12 +18,12 @@ function wordAt(cm, { line, ch }) {
 }
 
 // The buffer's lines, from its first, which is not 0 in every CodeMirror 5 document.
-function bufferLines(cm) {
+function bufferLines(cm: Adapter) {
   const first = cm.firstLine?.() ?? 0;
   return { first, lines: Array.from({ length: cm.lastLine() - first + 1 }, (_, i) => cm.getLine(first + i)) };
 }
 
-function rename(cm, target, name) {
+function rename(cm: Adapter, target: Target, name: string) {
   const re = new RegExp(`(?<!${WORD})${target.word}(?!${WORD})`, "gu");
   const { first, lines } = bufferLines(cm);
   let from = -1, to = -1, shift = 0; // indexes into lines of the first and last changed line
@@ -37,8 +41,9 @@ function rename(cm, target, name) {
   cm.setCursor({ line: target.line, ch: target.start + shift });
 }
 
-function prompt(cm, target) {
-  const count = bufferLines(cm).lines.join("\n").match(new RegExp(`(?<!${WORD})${target.word}(?!${WORD})`, "gu")).length;
+function prompt(cm: Adapter, target: Target) {
+  // The target is assumed to still be in the buffer when the delayed prompt opens.
+  const count = bufferLines(cm).lines.join("\n").match(new RegExp(`(?<!${WORD})${target.word}(?!${WORD})`, "gu"))!.length;
   // The shape of vim.js's own prompt, which every adapter's openDialog takes.
   const input = Object.assign(document.createElement("input"), { type: "text", autocomplete: "off", spellcheck: false });
   const label = document.createElement("span");
@@ -49,7 +54,7 @@ function prompt(cm, target) {
   desc.textContent = ` ${count} in the file`;
   const template = document.createDocumentFragment();
   template.append(label, desc);
-  const onClose = (name) => {
+  const onClose = (name: unknown) => {
     if (typeof name === "string" && name && name !== target.word) rename(cm, target, name);
   };
   if (!cm.openDialog) return onClose(window.prompt(`Rename ${target.word} to`, target.word));
@@ -57,7 +62,7 @@ function prompt(cm, target) {
   input.select(); // monaco-vim selects the input before it fills it in
 }
 
-function renameAction(cm) {
+function renameAction(cm: Adapter) {
   const target = wordAt(cm, cm.getCursor());
   // After the key: a box or prompt opened while the editor still handles it loses focus to the
   // editor in newer Monaco (CoderPad), which closes it.
@@ -68,7 +73,7 @@ function renameAction(cm) {
   });
 }
 
-export const install = (Vim) => {
+export const install = (Vim: VimApi) => {
   Vim.defineAction(ACTION, renameAction);
   Vim.mapCommand("grn", "action", ACTION, {}, { context: "normal" });
 };

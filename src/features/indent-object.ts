@@ -1,22 +1,25 @@
+import type { Adapter, Motion, VimApi } from "../vim-api.ts";
+
 // Indent text objects ii, ai, iI, aI.
 // Port of vim-indent-object by Michael Smith (MIT): https://github.com/michaeljsmith/vim-indent-object
 const MOTION = "vimOverlayIndentObject";
 // [keys, inner, below]: "a" adds the line above, "I" (with "a") also adds the line below.
-const OBJECTS = [
+const OBJECTS: [string, boolean, boolean][] = [
   ["ii", true, false],
   ["ai", false, false],
   ["iI", true, true],
   ["aI", false, true],
 ];
-const lastRange = new WeakMap(); // adapter -> [top, bottom] of the last result
+const lastRange = new WeakMap<Adapter, [number, number]>(); // adapter -> [top, bottom] of the last result
 
 // Port of the plugin's TextObject(). Lines are 0-based; -1 and lines.length
 // stand in for Vim's line 0 and line("$") + 1, which getline() and indent()
 // treat as blank with indent -1. Returns [top, bottom], inclusive.
-function findIndentBlock(lines, top, bottom, { inner, below, count, fresh, tabSize }) {
+function findIndentBlock(lines: string[], top: number, bottom: number,
+  { inner, below, count, fresh, tabSize }: { inner: boolean; below: boolean; count: number; fresh: boolean; tabSize: number }) {
   const n = lines.length;
-  const blank = (l) => l < 0 || l >= n || /^[ \t]*$/.test(lines[l]);
-  const indent = (l) => {
+  const blank = (l: number) => l < 0 || l >= n || /^[ \t]*$/.test(lines[l]);
+  const indent = (l: number) => {
     if (l < 0 || l >= n) return -1;
     let width = 0;
     for (const ch of lines[l]) {
@@ -28,7 +31,7 @@ function findIndentBlock(lines, top, bottom, { inner, below, count, fresh, tabSi
   };
 
   // One pass of the plugin's loop: grow [l0, l1] to the block around it.
-  function grow(l0, l1) {
+  function grow(l0: number, l1: number): [number, number] {
     let idnt = Infinity;
     for (let l = l0; l <= l1; l++) if (!blank(l)) idnt = Math.min(idnt, indent(l));
     let a = l0, b = l1, aKeep = l0, bKeep = l1;
@@ -67,7 +70,7 @@ function findIndentBlock(lines, top, bottom, { inner, below, count, fresh, tabSi
   // first pass even when nothing changes. So a count of n acts like n presses
   // in Visual mode, as the plugin's doc says. (Its code counts every pass of
   // a fresh selection, which makes y2ii the same as yii.)
-  let range = [top, bottom], probe = range, force = fresh;
+  let range: [number, number] = [top, bottom], probe = range, force = fresh;
   while (count > 0) {
     const [a, b] = grow(probe[0], probe[1]);
     if (force || a !== range[0] || b !== range[1]) {
@@ -86,7 +89,7 @@ function findIndentBlock(lines, top, bottom, { inner, below, count, fresh, tabSi
 
 // vim.js motion: (cm, head, motionArgs, vim) -> [anchor, head]. cm is the
 // host's CodeMirror-compatible adapter.
-function indentObjectMotion(cm, head, args, vim) {
+const indentObjectMotion: Motion<{ inner: boolean; below: boolean }> = (cm, head, args, vim) => {
   // A CodeMirror 5 document can start at a line other than 0; findIndentBlock counts from 0.
   const first = cm.firstLine?.() ?? 0;
   const lines = [];
@@ -116,9 +119,9 @@ function indentObjectMotion(cm, head, args, vim) {
     cm.constructor.signal?.(cm, "vim-mode-change", { mode: "visual", subMode: "linewise" });
   }
   return [{ line: start + first, ch: 0 }, { line: end + first, ch: 0 }];
-}
+};
 
-export const install = (Vim) => {
+export const install = (Vim: VimApi) => {
   Vim.defineMotion(MOTION, indentObjectMotion);
   // mapCommand puts these ahead of the built-in i<character>/a<character>.
   for (const [keys, inner, below] of OBJECTS) Vim.mapCommand(keys, "motion", MOTION, { inner, below });

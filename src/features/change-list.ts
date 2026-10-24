@@ -1,12 +1,15 @@
+import type { Adapter, Bookmark, Change, Motion, Pos, VimApi } from "../vim-api.ts";
+
 // g; and g, go to older and newer change positions, as in Vim and Zed, and `. and '. go to
 // the newest. vim.js's own `. reads CodeMirror 5's edit history, which monaco-vim's adapter
 // does not have, so this keeps one list per editor on every host. As in Vim, changes close
 // together on one line, or within one Insert-mode session, keep one position.
 const MOTION = "vimOverlayChangeList";
 const MAX = 100;
-const lists = new WeakMap(); // adapter -> { marks: bookmarks, oldest first, index, merge }
+interface ChangeList { marks: Bookmark[]; index: number; merge: boolean }
+const lists = new WeakMap<Adapter, ChangeList>(); // adapter -> { marks: bookmarks, oldest first, index, merge }
 
-function clear(l) {
+function clear(l: ChangeList) {
   for (const m of l.marks) m.clear();
   l.marks = [];
   l.index = 0;
@@ -15,14 +18,14 @@ function clear(l) {
 
 // A position that moves with edits around it. monaco-vim's bookmarks keep their line and
 // column whatever changes, so on Monaco this uses a decoration, which Monaco moves.
-function bookmark(cm, pos) {
+function bookmark(cm: Adapter, pos: Pos): Bookmark {
   const model = cm.editor?.getModel?.();
   if (!model?.deltaDecorations) return cm.setBookmark(pos);
   const range = { startLineNumber: pos.line + 1, startColumn: pos.ch + 1, endLineNumber: pos.line + 1, endColumn: pos.ch + 1 };
   const [id] = model.deltaDecorations([], [{ range, options: { stickiness: 1 } }]); // NeverGrowsWhenTypingAtEdges
   return {
     find() {
-      const r = cm.editor.getModel() === model && model.getDecorationRange(id);
+      const r = cm.editor!.getModel() === model && model.getDecorationRange(id);
       return r ? { line: r.startLineNumber - 1, ch: r.startColumn - 1 } : null;
     },
     clear: () => model.deltaDecorations([id], []),
@@ -43,7 +46,7 @@ for (const type of ["keydown", "beforeinput", "paste", "cut", "drop", "compositi
 
 // Whether text is the whole buffer. monaco-vim's adapter has no getValue, and a CodeMirror 5
 // document may start at a line other than 0.
-function wholeBuffer(cm, text) {
+function wholeBuffer(cm: Adapter, text: string) {
   const first = cm.firstLine?.() ?? 0;
   const count = cm.lastLine() - first + 1;
   if (text.split("\n").length !== count) return false;
@@ -52,21 +55,21 @@ function wholeBuffer(cm, text) {
 
 // Where Vim remembers a change: the last inserted character, or where text was deleted.
 // A linewise insert at column 0 ends with a newline; its last character is on the line before.
-function changePos(line, ch, text) {
+function changePos(line: number, ch: number, text: string) {
   if (!text) return { line, ch };
   const lines = text.split(/\r?\n/);
   if (lines.length > 1 && ch === 0 && lines.at(-1) === "") lines.pop();
-  const lastLength = lines.at(-1).length;
+  const lastLength = lines.at(-1)!.length;
   return lines.length === 1 ? { line, ch: Math.max(0, ch + lastLength - 1) } : { line: line + lines.length - 1, ch: Math.max(0, lastLength - 1) };
 }
 
-function record(cm, l, pos, whole) {
+function record(cm: Adapter, l: ChangeList, pos: Pos, whole: boolean) {
   if (!userInput) return whole && clear(l);
   const vim = cm.state.vim;
   const last = l.marks.at(-1)?.find();
-  if (last && (l.merge || (last.line === pos.line && Math.abs(last.ch - pos.ch) < 79))) l.marks.pop().clear();
+  if (last && (l.merge || (last.line === pos.line && Math.abs(last.ch - pos.ch) < 79))) l.marks.pop()!.clear();
   l.marks.push(bookmark(cm, pos));
-  if (l.marks.length > MAX) l.marks.shift().clear();
+  if (l.marks.length > MAX) l.marks.shift()!.clear();
   l.index = l.marks.length;
   l.merge = !!vim?.insertMode;
 }
@@ -74,8 +77,8 @@ function record(cm, l, pos, whole) {
 // Each edit's own position, when it happens, so a macro that edits several places in one
 // key records each of them. The adapters' change events carry no positions, so this reads
 // each editor's own.
-function watch(cm, l) {
-  const onChange = (pos, whole) => record(cm, l, pos, whole);
+function watch(cm: Adapter, l: ChangeList) {
+  const onChange = (pos: Pos, whole: boolean) => record(cm, l, pos, whole);
   if (cm.editor?.onDidChangeModelContent) {
     cm.editor.onDidChangeModelContent((e) => {
       for (const c of e.changes) onChange(changePos(c.range.startLineNumber - 1, c.range.startColumn - 1, c.text), e.isFlush);
@@ -91,7 +94,7 @@ function watch(cm, l) {
     // The CodeMirror 6 adapter signals once per operation, with its changes as a list, and
     // keeps where the last of them ended.
     cm.on("change", (...args) => {
-      let c = args.find((a) => a?.text);
+      let c = args.find((a): a is Change => !!(a as Partial<Change>)?.text);
       while (c?.next) c = c.next;
       const text = (c?.text ?? []).join("\n");
       const start = cm.posFromIndex(Math.max(0, (cm.$lastChangeEndOffset ?? 0) - text.length));
@@ -102,18 +105,18 @@ function watch(cm, l) {
   }
 }
 
-function list(cm) {
+function list(cm: Adapter) {
   let l = lists.get(cm);
   if (!l) {
     l = { marks: [], index: 0, merge: false };
     lists.set(cm, l);
     watch(cm, l);
-    cm.on("vim-mode-change", () => (l.merge = false));
+    cm.on("vim-mode-change", () => (l!.merge = false));
   }
   return l;
 }
 
-function changeListMotion(cm, head, args) {
+const changeListMotion: Motion<{ newest?: boolean; forward?: boolean }> = (cm, head, args) => {
   const l = list(cm);
   l.marks = l.marks.filter((m) => m.find());
   l.index = Math.min(l.index, l.marks.length);
@@ -126,13 +129,13 @@ function changeListMotion(cm, head, args) {
   if (args.forward ? l.index >= l.marks.length - 1 : l.index === 0) return null;
   l.index = args.forward ? Math.min(l.index + args.repeat, l.marks.length - 1) : Math.max(l.index - args.repeat, 0);
   return l.marks[l.index].find();
-}
+};
 
-export const install = (Vim) => {
+export const install = (Vim: VimApi) => {
   // Start each editor's list at its first key, before any change the list should hold.
   const findKey = Vim.findKey;
   Vim.findKey = function (cm, ...rest) {
-    if (cm?.setBookmark) list(cm);
+    if ((cm as Partial<Adapter> | undefined)?.setBookmark) list(cm);
     return findKey.call(this, cm, ...rest);
   };
   Vim.defineMotion(MOTION, changeListMotion);

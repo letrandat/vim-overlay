@@ -4,7 +4,7 @@ A browser extension that adds missing Vim features to the Vim mode a page's code
 
 ## Hosts
 
-A host finds the `Vim` objects live in the page. `src/runtime.js` asks every host once a second.
+A host finds the `Vim` objects live in the page. `src/runtime.ts` asks every host once a second.
 
 | Host | How it is found | Tested |
 | --- | --- | --- |
@@ -49,11 +49,13 @@ After changing a file, run `npm run build` again (or keep `npm run watch` runnin
 
 ## Add or remove a feature
 
-Add one module to `src/features/` that exports `install`, and list it in `features` in `src/registry.js`. Its browser scenarios go in `test/browser/features/<name>.cjs`, listed in `FEATURES` in `test/browser.test.cjs`. To remove a feature, delete its files and lines.
+Add one module to `src/features/` that exports `install`, and list it in `features` in `src/registry.ts`. Its browser scenarios go in `test/browser/features/<name>.cjs`, listed in `FEATURES` in `test/browser.test.cjs`. To remove a feature, delete its files and lines.
 
-```js
-// src/features/my-feature.js
-export const install = (Vim) => {
+```ts
+// src/features/my-feature.ts
+import type { VimApi } from "../vim-api.ts";
+
+export const install = (Vim: VimApi) => {
   // Q replays the last recorded macro.
   Vim.map("Q", "@@", "normal");
 };
@@ -63,21 +65,27 @@ export const install = (Vim) => {
 
 ## Add or remove a host
 
-Add one module to `src/hosts/` that exports `find`, and list it in `hosts` in `src/registry.js`. To remove a host, delete the file and its lines.
+Add one module to `src/hosts/` that exports `find`, and list it in `hosts` in `src/registry.ts`. To remove a host, delete the file and its lines.
 
-```js
-// src/hosts/my-editor.js: return every Vim object live in the page now.
-export const find = () => [window.myEditor?.Vim].filter(Boolean);
+```ts
+// src/hosts/my-editor.ts: return every Vim object live in the page now.
+import type { VimApi } from "../vim-api.ts";
+import { property } from "./page.ts";
+
+// The known host path supplies the API; keep page property reads unknown until this check.
+export const find = () =>
+  [property(property(window, "myEditor"), "Vim")].filter(Boolean) as VimApi[];
 ```
 
 ## Layout
 
 ```text
 manifest.json          the extension's manifest; the build copies it to dist/
-scripts/build.mjs      bundles src/content.js into dist/content.js with esbuild
-src/content.js         the content script: starts the runtime with every host and feature
-src/registry.js        every host and feature, by name
-src/runtime.js         asks the hosts for Vim objects once a second and installs the features on each
+scripts/build.mjs      bundles src/content.ts into dist/content.js with esbuild
+src/content.ts         the content script: starts the runtime with every host and feature
+src/registry.ts        every host and feature, by name
+src/runtime.ts         asks the hosts for Vim objects once a second and installs the features on each
+src/vim-api.ts         the Vim API and adapter types used by the extension
 src/hosts/             one module per way of finding a page's Vim object
 src/features/          one module per feature
 test/                  see Tests
@@ -89,7 +97,9 @@ test/                  see Tests
 npm install && npx playwright install webkit && npm test
 ```
 
-`npm test` builds, then runs both suites. `test/node.test.cjs` bundles the runtime, the webpack host and the indent object as the build does, runs them in a `vm` sandbox, and runs the indent range logic against `oracle.json`, which real Vim recorded with the original plugin (`npm run oracle` regenerates it). `test/browser.test.cjs` loads each host page in WebKit with editors from jsDelivr, injects the built content script, types real keys, and compares built-in commands with a page that has no extension. `test/browser/harness.cjs` opens pages and plays keys, and each file in `test/browser/features/` holds one feature's scenarios and any checks it runs before or after them. It needs network access. Run one host with `node test/browser.test.cjs codemirror5`, or another browser with `BROWSER=chromium`.
+`npm run typecheck` checks the source with strict TypeScript and emits nothing; esbuild writes the bundle. Source imports use explicit `.ts` extensions, supported by both tools. `src/vim-api.ts` owns the narrow types for the Vim API and the adapters each host supplies.
+
+`npm test` type-checks, builds, then runs both suites. `test/node.test.cjs` bundles the runtime, the webpack host and the indent object as the build does, runs them in a `vm` sandbox, and runs the indent range logic against `oracle.json`, which real Vim recorded with the original plugin (`npm run oracle` regenerates it). `test/browser.test.cjs` loads each host page in WebKit with editors from jsDelivr, injects the built content script, types real keys, and compares built-in commands with a page that has no extension. `test/browser/harness.cjs` opens pages and plays keys, and each file in `test/browser/features/` holds one feature's scenarios and any checks it runs before or after them. It needs network access. Run one host with `node test/browser.test.cjs codemirror5`, or another browser with `BROWSER=chromium`.
 
 ## Credits and licence
 

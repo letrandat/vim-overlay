@@ -5,11 +5,13 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "watch": "node scripts/build.mjs --watch",
-    "test": "npm run build && node test/node.test.cjs && node test/browser.test.cjs",
-    "oracle": "node test/make-oracle.cjs"
+    "test": "npm run typecheck && npm run build && node test/node.test.cjs && node test/browser.test.cjs",
+    "oracle": "node test/make-oracle.cjs",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "esbuild": "0.28.2",
-    "playwright": "1.63.0"
+    "playwright": "1.63.0",
+    "typescript": "7.0.2"
   }
 }

@@ -1,15 +1,21 @@
+import type { Adapter, VimApi } from "../vim-api.ts";
+
 // Insert-mode keyword completion from words in the buffer, like Vim's i_CTRL-N
 // and i_CTRL-P, without the popup menu: each press puts the next match in place,
 // and after the last match the typed prefix comes back.
 const ACTION = "vimOverlayComplete";
 const WORD = /[\p{L}\p{N}_]+/gu;
-const sessions = new WeakMap(); // adapter -> { line, start, end, text, matches, index, forward, before }
-const watched = new WeakSet();
+interface Session {
+  line: number; start: number; end: number; text?: string; matches: string[]; index: number;
+  forward: boolean; before: unknown[];
+}
+const sessions = new WeakMap<Adapter, Session>(); // adapter -> { line, start, end, text, matches, index, forward, before }
+const watched = new WeakSet<Adapter>();
 
 // Words starting with prefix, nearest first in the direction of the search,
 // wrapping around the buffer as Vim does.
-function candidates(cm, line, start, prefix, forward) {
-  const before = [], after = [];
+function candidates(cm: Adapter, line: number, start: number, prefix: string, forward: boolean) {
+  const before: string[] = [], after: string[] = [];
   for (let l = cm.firstLine?.() ?? 0; l <= cm.lastLine(); l++) {
     for (const m of cm.getLine(l).matchAll(WORD)) {
       if (l === line && m.index === start) continue; // the word being completed
@@ -23,7 +29,7 @@ function candidates(cm, line, start, prefix, forward) {
 // Replace text on one line and put the cursor after it, as typing would, so the
 // host's undo history groups it with the typing around it like an Insert-mode
 // undo. Each adapter's replaceRange and setCursor start a new undo group.
-function type(cm, text, line, from, to) {
+function type(cm: Adapter, text: string, line: number, from: number, to: number) {
   if (cm.cm6) {
     // CodeMirror 6 ends a history group at a selection-only transaction.
     const start = cm.cm6.state.doc.line(line + 1).from;
@@ -43,7 +49,7 @@ function type(cm, text, line, from, to) {
   }
 }
 
-function complete(Vim, cm, forward) {
+function complete(Vim: VimApi, cm: Adapter, forward: boolean) {
   if (cm.cm6?.state.readOnly) return; // type() skips the CodeMirror 6 adapter, which has this check
   const cur = cm.getCursor();
   const text = cm.getLine(cur.line);
@@ -83,8 +89,8 @@ function complete(Vim, cm, forward) {
   });
 }
 
-export const install = (Vim) => {
-  Vim.defineAction(ACTION, (cm, args) => complete(Vim, cm, args.forward));
+export const install = (Vim: VimApi) => {
+  Vim.defineAction<{ forward: boolean }>(ACTION, (cm, args) => complete(Vim, cm, args.forward));
   Vim.mapCommand("<C-n>", "action", ACTION, { forward: true }, { context: "insert" });
   Vim.mapCommand("<C-p>", "action", ACTION, { forward: false }, { context: "insert" });
 };

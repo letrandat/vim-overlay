@@ -1,12 +1,14 @@
+import type { Adapter, Motion, VimApi } from "../vim-api.ts";
+
 // Ctrl-J and Ctrl-K move the current line, or the lines a Visual selection
 // covers, down or up, as the nvim and Zed configs bind them. A count moves that
 // many lines. It is a motion so that vim.js moves the Visual selection with the
 // lines, as it does for any motion that returns a range.
 const MOTION = "vimOverlayMoveLines";
 
-const lines = (cm, from, to) => Array.from({ length: to - from + 1 }, (_, i) => cm.getLine(from + i));
+const lines = (cm: Adapter, from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => cm.getLine(from + i));
 
-function moveLinesMotion(cm, head, args, vim, inputState) {
+const moveLinesMotion: Motion<{ forward: boolean }> = (cm, head, args, vim, inputState) => {
   if (inputState.operator) return null; // d<C-j> and the like do nothing
   const anchor = vim.visualMode ? vim.sel.anchor : head;
   const top = Math.min(anchor.line, head.line);
@@ -24,9 +26,9 @@ function moveLinesMotion(cm, head, args, vim, inputState) {
     { line: anchor.line + by, ch: anchor.ch },
     { line: head.line + by, ch: head.ch },
   ];
-}
+};
 
-export const install = (Vim) => {
+export const install = (Vim: VimApi) => {
   Vim.defineMotion(MOTION, moveLinesMotion);
   for (const context of ["normal", "visual"]) {
     Vim.mapCommand("<C-j>", "motion", MOTION, { forward: true }, { context });
