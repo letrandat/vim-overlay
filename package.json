@@ -1,0 +1,15 @@
+{
+  "name": "vim-overlay",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "test": "npm run build && node test/node.test.cjs && node test/browser.test.cjs",
+    "oracle": "node test/make-oracle.cjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "playwright": "1.63.0"
+  }
+}

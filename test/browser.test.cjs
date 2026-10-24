@@ -1,11 +1,12 @@
 #!/usr/bin/env node
-// Each host page loads its editor from jsDelivr. The manifest's content
+// Each host page loads its editor from jsDelivr. The built manifest's content
 // scripts are injected at document start in manifest order, as the browser
-// does with "world": "MAIN". Keys are typed as real key presses.
+// does with "world": "MAIN". Keys are typed as real key presses. Run
+// `npm run build` first; `npm test` does.
 //
-//   node browser.test.cjs                 every host
-//   node browser.test.cjs codemirror5     one host
-//   BROWSER=chromium node browser.test.cjs
+//   node test/browser.test.cjs                 every host
+//   node test/browser.test.cjs codemirror5     one host
+//   BROWSER=chromium node test/browser.test.cjs
 "use strict";
 const { [process.env.BROWSER || "webkit"]: browserType } = require("playwright");
 const { SCRIPTS, serve, openPage, play, sweep, same } = require("./browser/harness.cjs");
