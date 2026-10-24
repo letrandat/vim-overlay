@@ -58,13 +58,13 @@ function run(box, file) {
   const installs = [];
   const page = newSandbox();
   const { box, tick, warnings } = page;
-  const { hosts, features } = run(box, "src/registry.js");
+  const { hosts, features } = run(box, "src/registry.ts");
   const start = (copy) =>
     copy.start(
       { "broken-host": () => { throw new Error("boom"); }, ...hosts, fake: () => vims },
       { "broken-feature": () => { throw new Error("bad"); }, ...features, probe: (Vim) => installs.push(Vim) }
     );
-  start(run(box, "src/runtime.js"));
+  start(run(box, "src/runtime.ts"));
   assert.strictEqual(installs.length, 0, "nothing to install before a Vim object appears");
   const a = stubVim();
   vims.push(a, a);
@@ -79,7 +79,7 @@ function run(box, file) {
   vims.push(b);
   tick();
   assert.deepStrictEqual(installs, [a, b], "a new Vim object gets every feature");
-  start(run(box, "src/runtime.js"));
+  start(run(box, "src/runtime.ts"));
   tick();
   assert.strictEqual(page.timers.length, 1, "a second copy of the script does not poll again");
   assert.deepStrictEqual([a.commands.length, a.maps.length, installs.length], [20, 1, 2], "a second copy of the script does not install again");
@@ -96,7 +96,7 @@ function run(box, file) {
   // A Proxy export whose ownKeys trap throws does not stop it, nor does a page global that shares
   // the name of the module variable holding Vim.
   const { box: sandbox, warnings } = newSandbox();
-  const host = run(sandbox, "src/hosts/webpack.js").find;
+  const host = run(sandbox, "src/hosts/webpack.ts").find;
   sandbox.document.querySelector = () => ({}); // an editor is on the page
   sandbox.self = sandbox;
   sandbox.ran = [];
@@ -203,7 +203,7 @@ function run(box, file) {
 }
 
 const Vim = stubVim();
-run(newSandbox().box, "src/features/indent-object.js").install(Vim);
+run(newSandbox().box, "src/features/indent-object.ts").install(Vim);
 const motion = Vim.motions[Vim.commands[0].name];
 const argsFor = (obj) => ({ ...Vim.commands.find((c) => c.keys === obj).args });
 const fmt = (r) => (r ? `${r[0]}-${r[1]}` : "none");

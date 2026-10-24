@@ -6,9 +6,28 @@
 // can a getter written inside a `with` block, which no check here can tell from a module variable.
 // Where a module exports monaco-vim's initVimMode but not Vim, the host calls initVimMode once on a
 // stub editor (see vimFromInit).
-const pushed = new WeakSet(); // chunk arrays this copy of the script has pushed into
+import type { VimApi } from "../vim-api.ts";
+import { property } from "./page.ts";
+
+// Webpack runtime internals have no public types; exports stay unknown until the Vim signature check.
+interface WebpackRequire {
+  (id: string | { [Symbol.toPrimitive](): string | symbol }): unknown;
+  c?: Record<string, { exports: unknown }>;
+  i?: unknown[];
+  m: Record<string, (...args: never[]) => unknown>;
+  h?(): string;
+}
+interface Runtime {
+  chunks: unknown[];
+  walked: string | null;
+  seen: Map<string, (...args: never[]) => unknown>;
+  candidates: Set<string>;
+  vims: VimApi[];
+}
+
+const pushed = new WeakSet<unknown[]>(); // chunk arrays this copy of the script has pushed into
 // require -> { chunks, walked: walk key at the last walk, seen: Map of module id -> factory, candidates: Set of ids, vims }
-const runtimes = new Map();
+const runtimes = new Map<WebpackRequire, Runtime>();
 const EDITOR = ".monaco-editor, .cm-editor, .CodeMirror, .ace_editor";
 // Where vim.js builds its API object. Most modules that only use the API do not match. Development
 // builds wrap each module in an eval string, where line breaks are the two characters \n.
@@ -23,7 +42,7 @@ const BINDING = new RegExp(String.raw`^(?:\(\)\s*=>\s*\(?\s*(${ID})\s*\)?|functi
 // A module's exports if the page has run it, else undefined. Webpack's require turns the id into
 // a property key at each use. This id gives the real key to the cache lookup only; after a miss,
 // the cache write and the factory lookup get MISS, which has no factory, so the call throws.
-function ranExports(require, id) {
+function ranExports(require: WebpackRequire, id: string) {
   if (require.c) return require.c[id]?.exports;
   if (require.i?.length) return undefined; // interceptors run page code on a miss, before the lookup
   let uses = 0;
@@ -35,22 +54,22 @@ function ranExports(require, id) {
 }
 
 // obj[key] if reading it runs no page code: a data property or a webpack export getter.
-function read(obj, key) {
+function read(obj: unknown, key: PropertyKey): unknown {
   for (let o = obj; o !== null && (typeof o === "object" || typeof o === "function"); o = Object.getPrototypeOf(o)) {
     const d = Object.getOwnPropertyDescriptor(o, key);
     if (!d) continue;
-    if ("value" in d) return d.value;
+    if ("value" in d) return d.value as unknown;
     const source = d.get && Function.prototype.toString.call(d.get).replace(/\/\*.*?\*\//g, "").trim();
     const m = source && BINDING.exec(source);
     const name = m && (m[1] ?? m[2]);
-    return name && !globalAccessor(name) ? d.get.call(obj) : undefined;
+    return name && !globalAccessor(name) ? d.get!.call(obj) : undefined;
   }
 }
 
 // Whether a global named `name` is defined by a getter. The window and its prototypes are not
 // proxies and their prototypes cannot change, so reading their descriptors runs no page code.
 // A page can reassign globalThis but not window.
-function globalAccessor(name) {
+function globalAccessor(name: string) {
   for (let o = window; o !== null; o = Object.getPrototypeOf(o)) {
     const d = Object.getOwnPropertyDescriptor(o, name);
     if (d) return !("value" in d);
@@ -60,7 +79,7 @@ function globalAccessor(name) {
 
 // An editor that accepts every property read, call and construction, for monaco-vim to attach to.
 function stubEditor() {
-  const any = new Proxy(function () {}, {
+  const any: (...args: never[]) => unknown = new Proxy(function () {}, {
     get: (_, key) => (key === Symbol.toPrimitive ? () => 0 : key === "then" ? undefined : any),
     apply: () => any,
     construct: () => any,
@@ -76,11 +95,11 @@ function stubEditor() {
 const INIT_VIM_MODE = /["']vim-keypress["'][^]*["']vim-command-done["']/;
 // Not retried: a function's source does not change, and a call that throws may have run page code.
 const tried = new WeakSet();
-function vimFromInit(init) {
+function vimFromInit(init: unknown): unknown {
   if (typeof init !== "function" || tried.has(init)) return undefined;
   tried.add(init);
   if (!INIT_VIM_MODE.test(Function.prototype.toString.call(init))) return undefined;
-  let adapter;
+  let adapter: unknown;
   try {
     adapter = init(stubEditor());
   } catch (err) {
@@ -91,17 +110,19 @@ function vimFromInit(init) {
     return read(read(adapter, "constructor"), "Vim");
   } finally {
     try {
-      adapter?.dispose?.();
+      // initVimMode owns the returned adapter contract; retain its optional cleanup call.
+      const disposable = adapter as { dispose?: () => void } | null | undefined;
+      disposable?.dispose?.();
     } catch {}
   }
 }
 
-const isVim = (v) => typeof read(v, "defineMotion") === "function" && typeof read(v, "mapCommand") === "function";
+const isVim = (v: unknown): v is VimApi => typeof read(v, "defineMotion") === "function" && typeof read(v, "mapCommand") === "function";
 
-function vimsIn(exports) {
+function vimsIn(exports: unknown) {
   const values = [exports];
   // Every export: production builds shorten export names, so Vim may be under any of them.
-  let keys = [];
+  let keys: string[] = [];
   try {
     keys = Object.keys(Object(exports));
   } catch {} // a Proxy's ownKeys trap threw
@@ -110,7 +131,7 @@ function vimsIn(exports) {
       values.push(read(exports, key));
     } catch {} // a binding not yet initialized
   }
-  const vims = [];
+  const vims: VimApi[] = [];
   for (const value of values) {
     try {
       const Vim = isVim(value) ? value : read(value, "Vim");
@@ -136,7 +157,7 @@ export const find = () => {
   for (const key of Object.keys(window).filter((k) => k.startsWith("webpackChunk"))) {
     let chunks;
     try {
-      chunks = window[key];
+      chunks = property(window, key);
     } catch {
       continue;
     }
@@ -144,12 +165,12 @@ export const find = () => {
     pushed.add(chunks);
     // Every runtime sharing the array calls this, and one loading later replays it from the array.
     // The id is new each time: a runtime skips a chunk whose ids it has installed.
-    chunks.push([[Symbol("vim-overlay")], {}, (require) => {
+    chunks.push([[Symbol("vim-overlay")], {}, (require: WebpackRequire) => {
       if (!runtimes.has(require))
         runtimes.set(require, { chunks, walked: null, seen: new Map(), candidates: new Set(), vims: [] });
     }]);
   }
-  const found = [];
+  const found: VimApi[] = [];
   // Walking a large bundle's modules costs tens of milliseconds, so walk only where a Vim mode can
   // be, and only after modules change: the runtime pushes each chunk it installs to its array, and
   // a hot update, which adds and replaces modules without a chunk, changes the full hash, h().
@@ -161,7 +182,8 @@ export const find = () => {
       for (const [id, factory] of Object.entries(require.m)) {
         if (runtime.seen.get(id) === factory) continue;
         runtime.seen.set(id, factory);
-        if (DEFINES_VIM.test(factory)) runtime.candidates.add(id);
+        // RegExp.test coerces the factory to source text; the cast keeps that existing coercion.
+        if (DEFINES_VIM.test(factory as unknown as string)) runtime.candidates.add(id);
         else runtime.candidates.delete(id);
       }
     }

@@ -1,10 +1,12 @@
+import type { Decoration, MonacoEditor, VimApi } from "../vim-api.ts";
+
 // A column of relative line numbers between Monaco's own numbers and the code, so a count for
 // j or k reads off the screen while anyone watching a shared screen still sees the usual
 // numbers. Monaco only (LeetCode, CodeSignal, CoderPad). monaco-vim hands the editor to vim.js
 // only with a key, so the column appears at the editor's first key.
 const CLASS = "vim-overlay-rel";
 const MAX = 999;
-const shown = new WeakSet(); // Monaco editors
+const shown = new WeakSet<MonacoEditor>(); // Monaco editors
 
 // A margin decoration takes only class names, so one rule per number puts it on screen.
 function addStyle() {
@@ -18,18 +20,18 @@ function addStyle() {
   (document.head || document.documentElement).append(style);
 }
 
-function show(editor) {
+function show(editor: MonacoEditor) {
   if (shown.has(editor)) return;
   shown.add(editor);
   addStyle();
   editor.updateOptions({ lineDecorationsWidth: "4.5ch" });
   // createDecorationsCollection since Monaco 0.34, deltaDecorations before.
   const collection = editor.createDecorationsCollection?.();
-  let ids = [];
+  let ids: string[] = [];
   const render = () => {
     const model = editor.getModel();
     const cur = editor.getPosition()?.lineNumber;
-    const decorations = [];
+    const decorations: Decoration[] = [];
     if (model && cur) {
       const first = Math.max(1, cur - MAX);
       const last = Math.min(model.getLineCount(), cur + MAX);
@@ -57,10 +59,10 @@ function show(editor) {
   render();
 }
 
-export const install = (Vim) => {
+export const install = (Vim: VimApi) => {
   const findKey = Vim.findKey;
   Vim.findKey = function (cm, ...rest) {
-    if (cm?.editor?.deltaDecorations && cm.editor.onDidChangeCursorPosition) show(cm.editor);
+    if (cm?.editor?.deltaDecorations && (cm.editor as Partial<MonacoEditor>).onDidChangeCursorPosition) show(cm.editor);
     return findKey.call(this, cm, ...rest);
   };
 };
