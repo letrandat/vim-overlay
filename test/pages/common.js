@@ -3,11 +3,13 @@
 // before the extension can see the Vim object and watch(cm) on every editor.
 window.track = (Vim) => {
   window.testVim = Vim;
+  window.testOperators = {};
   window.calls = { defineMotion: 0, defineAction: 0, defineOperator: 0, mapCommand: 0, map: 0 };
   for (const name of Object.keys(window.calls)) {
     const real = Vim[name];
     Vim[name] = function (...args) {
       window.calls[name]++;
+      if (name === "defineOperator") window.testOperators[args[0]] = args[1];
       return real.apply(this, args);
     };
   }

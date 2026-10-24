@@ -14,6 +14,19 @@ const scenarios = [
 ];
 
 async function after({ page, cfg, check, play }) {
+  await play(["total"], [0, 0], "<Esc>");
+  const errors = [];
+  const onError = (e) => errors.push(e.message);
+  page.on("pageerror", onError);
+  await page.evaluate(() => {
+    for (const key of "grn") window.testVim.handleKey(window.cm, key);
+    window.setText("subtotal");
+  });
+  await page.waitForTimeout(100);
+  const gone = await page.evaluate(() => ({ text: window.cm.getLine(0), prompt: document.body.innerText.includes("Rename total to") }));
+  page.off("pageerror", onError);
+  check("grn opens no prompt when the word is gone", !errors.length && !gone.prompt && gone.text === "subtotal", JSON.stringify({ ...gone, errors }));
+
   if (cfg.offsetDoc) {
     await page.evaluate(() => {
       window.savedDoc = window.cm.swapDoc(CodeMirror.Doc("total = 0\ntotal += subtotal", null, 10));

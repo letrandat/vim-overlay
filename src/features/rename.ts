@@ -37,8 +37,8 @@ function rename(cm: Adapter, target: Target, name: string) {
 }
 
 function prompt(cm: Adapter, target: Target) {
-  // The target is assumed to still be in the buffer when the delayed prompt opens.
-  const count = bufferLines(cm).lines.join("\n").match(new RegExp(`(?<!${WORD})${target.word}(?!${WORD})`, "gu"))!.length;
+  const count = bufferLines(cm).lines.join("\n").match(new RegExp(`(?<!${WORD})${target.word}(?!${WORD})`, "gu"))?.length ?? 0;
+  if (!count) return;
   // The shape of vim.js's own prompt, which every adapter's openDialog takes.
   const input = Object.assign(document.createElement("input"), { type: "text", autocomplete: "off", spellcheck: false });
   const label = document.createElement("span");
