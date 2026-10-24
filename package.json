@@ -1,4 +1,5 @@
 {
+  "name": "vim-overlay",
   "private": true,
   "type": "module",
   "scripts": {
