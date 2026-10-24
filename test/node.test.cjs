@@ -1,17 +1,15 @@
 #!/usr/bin/env node
-// No browser. Loads the manifest's scripts into a vm sandbox with stub hosts and
-// a stub Vim API, checks main.js, then drives the indent-object motion through
-// every case in oracle.json (recorded from the real plugin in Vim).
+// No browser. Bundles source modules as the build does and runs them in a vm sandbox
+// with stub hosts and a stub Vim API, checks the runtime, then drives the indent-object
+// motion through every case in oracle.json (recorded from the real plugin in Vim).
 "use strict";
 const assert = require("assert");
-const fs = require("fs");
+const esbuild = require("esbuild");
 const path = require("path");
 const vm = require("vm");
 
 const ROOT = path.join(__dirname, "..");
-const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "manifest.json"), "utf8"));
-const scripts = manifest.content_scripts[0].js.map((f) => [f, fs.readFileSync(path.join(ROOT, f), "utf8")]);
-const oracle = JSON.parse(fs.readFileSync(path.join(__dirname, "oracle.json"), "utf8"));
+const oracle = require("./oracle.json");
 
 function stubVim() {
   const Vim = { motions: {}, actions: {}, operators: {}, commands: [], maps: [], defines: 0 };
@@ -28,40 +26,45 @@ function stubVim() {
   return Vim;
 }
 
-function load({ before = () => {}, only } = {}) {
+function newSandbox() {
   const timers = [];
   const warnings = [];
-  const sandbox = {
+  const box = {
     document: { querySelector: () => null, querySelectorAll: () => [] },
     console: { ...console, warn: (...a) => warnings.push(a.join(" ")) },
     setInterval: (fn) => timers.push(fn),
     addEventListener: () => {},
   };
-  sandbox.window = sandbox;
-  vm.createContext(sandbox);
-  for (const [file, code] of scripts) {
-    if (only && !only.includes(file)) continue;
-    if (file === "src/main.js") before(sandbox);
-    vm.runInContext(code, sandbox, { filename: file });
-  }
-  return { sandbox, tick: () => timers.forEach((fn) => fn()), timers, warnings };
+  box.window = box;
+  vm.createContext(box);
+  return { box, tick: () => timers.forEach((fn) => fn()), timers, warnings };
+}
+
+// Bundles one source module with what it imports, runs it in the sandbox as a page runs the
+// extension's script, and returns its exports. Each call runs a fresh copy, as a second injection would.
+function run(box, file) {
+  const { outputFiles } = esbuild.buildSync({
+    entryPoints: [path.join(ROOT, file)],
+    bundle: true,
+    format: "iife",
+    globalName: "moduleExports",
+    write: false,
+  });
+  return vm.runInContext(outputFiles[0].text + "\nmoduleExports", box, { filename: file });
 }
 
 {
   const vims = [];
   const installs = [];
-  const run = load({
-    before(w) {
-      w.vimOverlay.hosts["broken-host"] = () => { throw new Error("boom"); };
-      w.vimOverlay.hosts.fake = () => vims;
-      w.vimOverlay.features = {
-        "broken-feature": () => { throw new Error("bad"); },
-        ...w.vimOverlay.features,
-        probe: (Vim) => installs.push(Vim),
-      };
-    },
-  });
-  const { sandbox, tick, warnings } = run;
+  const page = newSandbox();
+  const { box, tick, warnings } = page;
+  const { hosts, features } = run(box, "src/registry.js");
+  const start = (copy) =>
+    copy.start(
+      { "broken-host": () => { throw new Error("boom"); }, ...hosts, fake: () => vims },
+      { "broken-feature": () => { throw new Error("bad"); }, ...features, probe: (Vim) => installs.push(Vim) }
+    );
+  start(run(box, "src/runtime.js"));
   assert.strictEqual(installs.length, 0, "nothing to install before a Vim object appears");
   const a = stubVim();
   vims.push(a, a);
@@ -76,16 +79,15 @@ function load({ before = () => {}, only } = {}) {
   vims.push(b);
   tick();
   assert.deepStrictEqual(installs, [a, b], "a new Vim object gets every feature");
-  for (const [file, code] of scripts) vm.runInContext(code, sandbox, { filename: file });
+  start(run(box, "src/runtime.js"));
   tick();
-  assert.strictEqual(run.timers.length, 1, "a second copy of the scripts does not poll again");
-  assert.deepStrictEqual([a.commands.length, a.maps.length], [20, 1], "a second copy of the scripts does not install again");
-  assert.strictEqual(Object.keys(sandbox.vimOverlay.hosts).length, 7, "a second copy of the scripts adds no hosts");
+  assert.strictEqual(page.timers.length, 1, "a second copy of the script does not poll again");
+  assert.deepStrictEqual([a.commands.length, a.maps.length, installs.length], [20, 1, 2], "a second copy of the script does not install again");
   const c = stubVim();
   vims.push(c);
   tick();
   assert.deepStrictEqual([c.defines, c.commands.length], [5, 20], "a Vim object found after a second copy installs once");
-  console.log("ok  main.js: once per Vim object, failures isolated and named, second copy is a no-op");
+  console.log("ok  runtime: once per Vim object, failures isolated and named, second copy is a no-op");
 }
 
 {
@@ -93,7 +95,8 @@ function load({ before = () => {}, only } = {}) {
   // page code for it: not a module the page has not run, nor a re-export's or a global's getter.
   // A Proxy export whose ownKeys trap throws does not stop it, nor does a page global that shares
   // the name of the module variable holding Vim.
-  const { sandbox, warnings } = load({ only: ["src/registry.js", "src/hosts/webpack.js"] });
+  const { box: sandbox, warnings } = newSandbox();
+  const host = run(sandbox, "src/hosts/webpack.js").find;
   sandbox.document.querySelector = () => ({}); // an editor is on the page
   sandbox.self = sandbox;
   sandbox.ran = [];
@@ -176,7 +179,6 @@ function load({ before = () => {}, only } = {}) {
     }]);`,
     sandbox
   );
-  const host = sandbox.vimOverlay.hosts.webpack;
   host();
   assert.deepStrictEqual(sandbox.ran, [], "runs no module the page has not run");
   sandbox.pageRequire("proxy");
@@ -201,10 +203,7 @@ function load({ before = () => {}, only } = {}) {
 }
 
 const Vim = stubVim();
-{
-  const { sandbox } = load({ only: ["src/registry.js", "src/features/indent-object.js"] });
-  sandbox.vimOverlay.features["indent-object"](Vim);
-}
+run(newSandbox().box, "src/features/indent-object.js").install(Vim);
 const motion = Vim.motions[Vim.commands[0].name];
 const argsFor = (obj) => ({ ...Vim.commands.find((c) => c.keys === obj).args });
 const fmt = (r) => (r ? `${r[0]}-${r[1]}` : "none");

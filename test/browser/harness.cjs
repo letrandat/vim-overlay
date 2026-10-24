@@ -1,14 +1,16 @@
 // Drives a host page in a real browser: serves test/pages, opens a page with or
-// without the manifest's content scripts, types keys and reads the editor back.
+// without the built extension's content scripts, types keys and reads the editor back.
 "use strict";
 const fs = require("fs");
 const http = require("http");
 const path = require("path");
 
-const ROOT = path.join(__dirname, "..", "..");
+// The extension as `npm run build` writes it.
+const DIST = path.join(__dirname, "..", "..", "dist");
 const PAGES = path.join(__dirname, "..", "pages");
-const SCRIPTS = JSON.parse(fs.readFileSync(path.join(ROOT, "manifest.json"), "utf8")).content_scripts[0].js.map(
-  (f) => path.join(ROOT, f)
+if (!fs.existsSync(path.join(DIST, "manifest.json"))) throw new Error("no dist/manifest.json: run `npm run build` first");
+const SCRIPTS = JSON.parse(fs.readFileSync(path.join(DIST, "manifest.json"), "utf8")).content_scripts[0].js.map(
+  (f) => path.join(DIST, f)
 );
 const oracle = require("../oracle.json");
 

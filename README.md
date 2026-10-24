@@ -4,7 +4,7 @@ A browser extension that adds missing Vim features to the Vim mode a page's code
 
 ## Hosts
 
-A host finds the `Vim` objects live in the page. `src/main.js` asks every host once a second.
+A host finds the `Vim` objects live in the page. `src/runtime.js` asks every host once a second.
 
 | Host | How it is found | Tested |
 | --- | --- | --- |
@@ -34,41 +34,62 @@ A host finds the `Vim` objects live in the page. `src/main.js` asks every host o
 
 ## Install
 
-- Chrome or Edge: open `chrome://extensions`, turn on Developer mode, click **Load unpacked**, and select this folder.
-- Firefox 128 or later: open `about:debugging`, click **This Firefox**, click **Load Temporary Add-on**, and select `manifest.json`.
+Build it first:
 
-After changing a file, reload the extension, then refresh the page.
+```sh
+npm install && npm run build
+```
+
+This writes the extension to `dist/`.
+
+- Chrome or Edge: open `chrome://extensions`, turn on Developer mode, click **Load unpacked**, and select the `dist` folder.
+- Firefox 128 or later: open `about:debugging`, click **This Firefox**, click **Load Temporary Add-on**, and select `dist/manifest.json`.
+
+After changing a file, run `npm run build` again (or keep `npm run watch` running), reload the extension, then refresh the page. `npm run watch` rebuilds the script but not the manifest.
 
 ## Add or remove a feature
 
-Add one file to `src/features/` and list it in `manifest.json` under `content_scripts[0].js`, before `src/main.js`. Its browser scenarios go in `test/browser/features/<name>.cjs`, listed in `FEATURES` in `test/browser.test.cjs`. To remove a feature, delete its files and lines.
+Add one module to `src/features/` that exports `install`, and list it in `features` in `src/registry.js`. Its browser scenarios go in `test/browser/features/<name>.cjs`, listed in `FEATURES` in `test/browser.test.cjs`. To remove a feature, delete its files and lines.
 
 ```js
 // src/features/my-feature.js
-window.vimOverlay.features["my-feature"] = (Vim) => {
+export const install = (Vim) => {
   // Q replays the last recorded macro.
   Vim.map("Q", "@@", "normal");
 };
 ```
 
-The function runs once per `Vim` object. If it throws, the other features still install, and the console shows a warning with the feature name.
+`install` runs once per `Vim` object, in the order of `features`. If it throws, the other features still install, and the console shows a warning with the feature's name.
 
 ## Add or remove a host
 
-Add one file to `src/hosts/` and list it in `manifest.json` before `src/main.js`. To remove a host, delete the file and its line.
+Add one module to `src/hosts/` that exports `find`, and list it in `hosts` in `src/registry.js`. To remove a host, delete the file and its lines.
 
 ```js
 // src/hosts/my-editor.js: return every Vim object live in the page now.
-window.vimOverlay.hosts["my-editor"] = () => [window.myEditor?.Vim].filter(Boolean);
+export const find = () => [window.myEditor?.Vim].filter(Boolean);
+```
+
+## Layout
+
+```text
+manifest.json          the extension's manifest; the build copies it to dist/
+scripts/build.mjs      bundles src/content.js into dist/content.js with esbuild
+src/content.js         the content script: starts the runtime with every host and feature
+src/registry.js        every host and feature, by name
+src/runtime.js         asks the hosts for Vim objects once a second and installs the features on each
+src/hosts/             one module per way of finding a page's Vim object
+src/features/          one module per feature
+test/                  see Tests
 ```
 
 ## Tests
 
 ```sh
-cd test && npm install && npx playwright install webkit && npm test
+npm install && npx playwright install webkit && npm test
 ```
 
-`node.test.cjs` checks `main.js` and runs the indent range logic against `oracle.json`, which real Vim recorded with the original plugin (`npm run oracle` regenerates it). `browser.test.cjs` loads each host page in WebKit with editors from jsDelivr, injects the manifest's scripts in manifest order as one script, types real keys, and compares built-in commands with a page that has no extension. `test/browser/harness.cjs` opens pages and plays keys, and each file in `test/browser/features/` holds one feature's scenarios and any checks it runs before or after them. It needs network access. Run one host with `node browser.test.cjs codemirror5`, or another browser with `BROWSER=chromium`.
+`npm test` builds, then runs both suites. `test/node.test.cjs` bundles the runtime, the webpack host and the indent object as the build does, runs them in a `vm` sandbox, and runs the indent range logic against `oracle.json`, which real Vim recorded with the original plugin (`npm run oracle` regenerates it). `test/browser.test.cjs` loads each host page in WebKit with editors from jsDelivr, injects the built content script, types real keys, and compares built-in commands with a page that has no extension. `test/browser/harness.cjs` opens pages and plays keys, and each file in `test/browser/features/` holds one feature's scenarios and any checks it runs before or after them. It needs network access. Run one host with `node test/browser.test.cjs codemirror5`, or another browser with `BROWSER=chromium`.
 
 ## Credits and licence
 

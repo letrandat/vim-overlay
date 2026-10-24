@@ -1,6 +1,6 @@
 // Yanks into the unnamed register also go to the system clipboard. Deletes and
 // named registers do not.
-window.vimOverlay.features.clipboard = (Vim) => {
+export const install = (Vim) => {
   // Wrapped on the prototype so a register controller made by a state reset keeps it.
   const proto = Object.getPrototypeOf(Vim.getRegisterController());
   const pushText = proto.pushText;
