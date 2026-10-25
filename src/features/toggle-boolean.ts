@@ -5,7 +5,7 @@ import type { Action, VimApi } from "../vim-api.ts";
 // number that ends after the cursor on its line. vim.js keeps its increment
 // private, so the number branch copies it to keep numbers unchanged.
 const ACTION = "vimOverlayIncrement";
-const BOOLEAN = /(?<![\w$])(?:true|false|True|False|TRUE|FALSE)(?![\w$])/g;
+const BOOLEAN = /(?<![\p{L}\p{N}\p{M}_$])(?:true|false|True|False|TRUE|FALSE)(?![\p{L}\p{N}\p{M}_$])/gu;
 const NUMBER = /(-?)(?:(0x)([\da-f]+)|(0b|0|)(\d+))/gi;
 const FLIP: Record<string, string> = { true: "false", false: "true", True: "False", False: "True", TRUE: "FALSE", FALSE: "TRUE" };
 const BASES: Record<string, number> = { "0b": 2, "0": 8, "": 10, "0x": 16 };
