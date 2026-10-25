@@ -28,6 +28,7 @@ const FEATURES = [
   "relative-numbers",
   "rename",
   "hover",
+  "toggle-boolean",
 ].map((name) => require(`./browser/features/${name}.cjs`));
 
 // found: whether the host is expected to find the page's Vim object.
@@ -45,7 +46,7 @@ const CONFIGS = [
 ];
 
 const installed = (page) => page.evaluate(() => window.calls);
-const ONCE = { defineMotion: 5, defineAction: 3, defineOperator: 1, mapCommand: 20, map: 1 };
+const ONCE = { defineMotion: 5, defineAction: 4, defineOperator: 1, mapCommand: 22, map: 1 };
 
 async function runConfig(browser, base, cfg) {
   const results = [];

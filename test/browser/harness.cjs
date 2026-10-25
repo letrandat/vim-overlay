@@ -46,7 +46,7 @@ async function openPage(browser, url, withExtension) {
 
 // Hold Shift for shifted characters, as a real keyboard does. Ace's vim maps
 // keys by keyCode and misreads an unshifted ">" after "." as another ".".
-const KEYS = { "<Esc>": "Escape", "<C-n>": "Control+KeyN", "<C-p>": "Control+KeyP", "<C-r>": "Control+KeyR", "<C-j>": "Control+KeyJ", "<C-k>": "Control+KeyK", "<Left>": "ArrowLeft", "<CR>": "Enter", "<BS>": "Backspace", "<Right>": "ArrowRight", ">": "Shift+Period", "<": "Shift+Comma", "(": "Shift+Digit9", '"': "Shift+Quote" };
+const KEYS = { "<Esc>": "Escape", "<C-n>": "Control+KeyN", "<C-p>": "Control+KeyP", "<C-r>": "Control+KeyR", "<C-j>": "Control+KeyJ", "<C-k>": "Control+KeyK", "<C-a>": "Control+KeyA", "<C-x>": "Control+KeyX", "<Left>": "ArrowLeft", "<CR>": "Enter", "<BS>": "Backspace", "<Right>": "ArrowRight", ">": "Shift+Period", "<": "Shift+Comma", "(": "Shift+Digit9", '"': "Shift+Quote" };
 for (const c of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") KEYS[c] = "Shift+Key" + c;
 
 async function play(page, lines, cursor, keys) {
