@@ -71,7 +71,7 @@ function run(box, file) {
   tick();
   tick();
   assert.deepStrictEqual(installs, [a], "one install per Vim object across duplicates and polls");
-  assert.deepStrictEqual(a.commands.map((c) => c.keys), ["ii", "ai", "iI", "aI", "ae", "<C-n>", "<C-p>", "<C-j>", "<C-k>", "<C-j>", "<C-k>", "iq", "aq", "gc", "g;", "g,", "`.", "'.", "grn", "gh"], "a throwing feature does not stop the others");
+  assert.deepStrictEqual(a.commands.map((c) => c.keys), ["ii", "ai", "iI", "aI", "ae", "<C-n>", "<C-p>", "<C-j>", "<C-k>", "<C-j>", "<C-k>", "iq", "aq", "gc", "g;", "g,", "`.", "'.", "grn", "gh", "<C-a>", "<C-x>"], "a throwing feature does not stop the others");
   assert.deepStrictEqual(a.maps, [["Y", "y$", "normal"]], "Y maps to y$ in Normal mode");
   assert.ok(warnings.some((w) => w.includes("broken-feature")), "warning names the feature");
   assert.ok(warnings.some((w) => w.includes("broken-host")), "warning names the host");
@@ -82,11 +82,11 @@ function run(box, file) {
   start(run(box, "src/runtime.ts"));
   tick();
   assert.strictEqual(page.timers.length, 1, "a second copy of the script does not poll again");
-  assert.deepStrictEqual([a.commands.length, a.maps.length, installs.length], [20, 1, 2], "a second copy of the script does not install again");
+  assert.deepStrictEqual([a.commands.length, a.maps.length, installs.length], [22, 1, 2], "a second copy of the script does not install again");
   const c = stubVim();
   vims.push(c);
   tick();
-  assert.deepStrictEqual([c.defines, c.commands.length], [5, 20], "a Vim object found after a second copy installs once");
+  assert.deepStrictEqual([c.defines, c.commands.length], [5, 22], "a Vim object found after a second copy installs once");
   console.log("ok  runtime: once per Vim object, failures isolated and named, second copy is a no-op");
 }
 

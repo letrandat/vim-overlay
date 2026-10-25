@@ -17,6 +17,7 @@ import { install as changeList } from "./features/change-list.ts";
 import { install as relativeNumbers } from "./features/relative-numbers.ts";
 import { install as rename } from "./features/rename.ts";
 import { install as hover } from "./features/hover.ts";
+import { install as toggleBoolean } from "./features/toggle-boolean.ts";
 
 export const hosts = { "monaco-vim": monacoVim, codemirror6, codemirror5, ace, webpack };
 
@@ -34,4 +35,5 @@ export const features = {
   "relative-numbers": relativeNumbers,
   rename,
   hover,
+  "toggle-boolean": toggleBoolean,
 };

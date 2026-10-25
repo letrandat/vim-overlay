@@ -21,6 +21,11 @@ const BUILTINS = [
   ["yy", ONE, [1, 4], "yy"],
   ["Visual Y yanks lines", ONE, [1, 4], "vjY"],
   ["2D", ONE, [1, 4], "2D"],
+  ["Ctrl-A on a number", ONE, [5, 0], "<C-a>"],
+  ["3 Ctrl-X past zero", ["x = 1"], [0, 0], "3<C-x>"],
+  ["Ctrl-A on a padded hex number", ["0x0f"], [0, 0], "<C-a>"],
+  ["Ctrl-X on a negative number", ["-1"], [0, 1], "<C-x>"],
+  ["Ctrl-A after the last number", ["1 b"], [0, 2], "<C-a>"],
 ];
 
 module.exports = BUILTINS;
