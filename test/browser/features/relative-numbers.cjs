@@ -49,6 +49,23 @@ async function after({ page, cfg, check, play }) {
   const back = await state(page);
   check(":set rnu shows the column again", (await numbers(page)) === "3,2,1,0,1" && back.rnu === true && back.option === "4.5ch" && back.width === on.width,
     JSON.stringify({ numbers: await numbers(page), back }));
+
+  // On a line that folds, Monaco's arrow shares the column's margin; the number ends before the
+  // arrow's glyph starts, with the arrow at the right of the margin.
+  await play(["def f():", "    return 1"], [1, 0], "<Esc>");
+  await page.waitForTimeout(300);
+  const fold = await page.evaluate(() => {
+    const arrow = document.querySelector(".cldr[class*=codicon-folding-]");
+    const number = [...document.querySelectorAll(".vim-overlay-rel")].find((e) => e.parentElement === arrow?.parentElement);
+    if (!arrow || !number) return null;
+    const glyph = parseFloat(getComputedStyle(arrow, "::before").width);
+    return {
+      numberEnd: number.getBoundingClientRect().right - parseFloat(getComputedStyle(number).paddingRight),
+      arrowStart: arrow.getBoundingClientRect().right - glyph,
+      justify: getComputedStyle(arrow).justifyContent,
+    };
+  });
+  check("folding arrow clear of the number", fold && fold.justify === "flex-end" && fold.numberEnd <= fold.arrowStart, JSON.stringify(fold));
 }
 
 module.exports = { after };
