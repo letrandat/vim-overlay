@@ -7,7 +7,8 @@
     "watch": "node scripts/build.mjs --watch",
     "test": "npm run typecheck && npm run build && node test/node.test.cjs && node test/browser.test.cjs",
     "oracle": "node test/make-oracle.cjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prototype": "npm run build && echo http://127.0.0.1:8123/test/pages/prototype-relnum-toggle.html && python3 -m http.server 8123 --bind 127.0.0.1"
   },
   "devDependencies": {
     "esbuild": "0.28.2",

@@ -1,0 +1,280 @@
+<!doctype html>
+<!--
+  PROTOTYPE, throw away. Question: how should the user turn the relative-numbers column on and off?
+  Four variants of the toggle on one LeetCode-like Monaco page, switchable via ?variant=A|B|C|D and
+  the floating bar at the bottom (or the ← → keys outside the editor). Run `npm run prototype`,
+  then open http://127.0.0.1:8123/test/pages/prototype-relnum-toggle.html
+  The page loads the real dist/content.js; the toggle itself is faked here by hiding the column's
+  numbers with CSS and narrowing Monaco's lineDecorationsWidth. Nothing persists across reloads.
+-->
+<meta charset="utf-8" />
+<title>PROTOTYPE relative-numbers toggle</title>
+<style>
+  :root { color-scheme: dark; --bg: #1a1a1a; --panel: #282828; --line: #3a3a3a; --text: #e6e6e6; --dim: #8a8a8a; --accent: #d19a66; --ok: #4caf7a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  code, kbd { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; background: #333; padding: 1px 5px; border-radius: 4px; }
+  kbd { border: 1px solid #555; border-bottom-width: 2px; }
+
+  /* Fake browser toolbar, used by variant C. */
+  #chrome { display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 12px; background: #202124; border-bottom: 1px solid #000; }
+  #chrome .url { flex: 1; height: 26px; border-radius: 13px; background: #303134; color: var(--dim); display: flex; align-items: center; padding: 0 14px; font-size: 12px; }
+  #ext-icon { width: 28px; height: 28px; border-radius: 6px; border: 0; background: transparent; color: var(--text); cursor: pointer; display: none; place-items: center; font: 700 13px ui-monospace, monospace; position: relative; }
+  #ext-icon:hover, #ext-icon.open { background: #3c4043; }
+  #ext-icon .dot { position: absolute; right: 3px; bottom: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); border: 1px solid #202124; }
+  .rel-off #ext-icon .dot { background: #666; }
+  .v-C #ext-icon { display: grid; }
+  #popup { position: absolute; top: 42px; right: 10px; width: 300px; background: #292a2d; border: 1px solid #444; border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,.6); padding: 12px 0 8px; z-index: 50; display: none; }
+  #popup.open { display: block; }
+  #popup h3 { margin: 0 14px 8px; font-size: 13px; display: flex; justify-content: space-between; align-items: baseline; }
+  #popup h3 small { color: var(--dim); font-weight: 400; }
+  #popup .row { display: flex; align-items: center; justify-content: space-between; padding: 6px 14px; gap: 10px; }
+  #popup .row.live { background: #33302b; }
+  #popup .row .name { font: 12px ui-monospace, monospace; }
+  #popup .row .desc { color: var(--dim); font-size: 11px; }
+  #popup .row.dead { opacity: .45; }
+  #popup .scope { margin: 8px 14px 0; padding-top: 8px; border-top: 1px solid #3c3c3c; color: var(--dim); font-size: 11px; display: flex; gap: 12px; }
+  .switch { position: relative; width: 32px; height: 18px; flex: none; border-radius: 9px; background: #555; border: 0; cursor: pointer; padding: 0; }
+  .switch::after { content: ""; position: absolute; left: 2px; top: 2px; width: 14px; height: 14px; border-radius: 50%; background: #ddd; transition: left .12s; }
+  .switch[aria-checked="true"] { background: var(--ok); }
+  .switch[aria-checked="true"]::after { left: 16px; }
+
+  /* Fake LeetCode shell. */
+  #app { display: grid; grid-template-columns: 1fr 940px; gap: 8px; padding: 8px; height: calc(100vh - 38px); }
+  .pane { background: var(--panel); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; }
+  .pane-head { height: 36px; display: flex; align-items: center; gap: 14px; padding: 0 12px; border-bottom: 1px solid var(--line); color: var(--dim); font-size: 12px; }
+  .pane-head b { color: var(--text); font-weight: 600; }
+  .problem { padding: 16px 18px; overflow: auto; }
+  .problem h2 { margin: 0 0 10px; font-size: 18px; }
+  .problem p { color: #c8c8c8; }
+  #editor { width: 920px; height: 470px; margin: 4px 10px 0; }
+  #statusrow { display: flex; align-items: center; justify-content: space-between; margin: 0 10px; height: 26px; border-top: 1px solid var(--line); font: 12px ui-monospace, monospace; color: var(--dim); }
+  #status { flex: 1; }
+  #status input { background: transparent; color: var(--text); border: 0; outline: 0; font: inherit; }
+
+  /* Variant B: status-line pill. */
+  #pill { display: none; border: 1px solid #555; background: transparent; color: var(--dim); font: 11px ui-monospace, monospace; border-radius: 10px; padding: 1px 8px; cursor: pointer; }
+  #pill:hover { border-color: var(--accent); color: var(--text); }
+  #pill .n { color: var(--accent); }
+  .rel-off #pill { text-decoration: line-through; opacity: .7; }
+  .rel-off #pill .n { color: var(--dim); }
+  .v-B #pill { display: inline-block; }
+
+  /* Every variant: off hides the numbers; Monaco's lineDecorationsWidth narrows in script. */
+  .rel-off .vim-overlay-rel::before { content: none !important; }
+  /* Variant D: the column is the switch. Off leaves a thin strip that brings it back. */
+  .v-D .vim-overlay-rel { cursor: pointer; }
+  .v-D .vim-overlay-rel:hover { background: rgba(209,154,102,.12); }
+  .v-D.rel-off .vim-overlay-rel { border-left: 1px dotted #555; }
+  .v-D.rel-off .margin-view-overlays:hover .vim-overlay-rel { border-left-color: var(--accent); }
+  .v-D.rel-off .vim-overlay-rel:hover::before { content: "#" !important; color: var(--accent); opacity: 1; padding-left: 2px; }
+
+  /* Hint card per variant + state readout. */
+  #side { display: grid; grid-template-columns: 1fr 260px; gap: 10px; margin: 10px; }
+  #hint { background: #1f1f1f; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  #hint h4 { margin: 0 0 6px; font-size: 13px; color: var(--accent); }
+  #hint ul { margin: 6px 0 0; padding-left: 18px; }
+  #hint .cost { color: var(--dim); margin-top: 8px; font-size: 12px; }
+  #state { background: #111; border: 1px dashed #444; border-radius: 8px; padding: 8px 10px; font: 11px/1.5 ui-monospace, monospace; color: #aaa; white-space: pre-wrap; overflow: auto; max-height: 150px; }
+
+  /* Prototype switcher: deliberately not LeetCode-looking. */
+  #switcher { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; align-items: center; gap: 4px; background: #fff; color: #111; border-radius: 999px; padding: 4px; box-shadow: 0 6px 24px rgba(0,0,0,.6); z-index: 100; font: 600 12px -apple-system, sans-serif; }
+  #switcher button { border: 0; background: #eee; color: #111; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 14px; }
+  #switcher button:hover { background: #ddd; }
+  #switcher span { padding: 0 12px; min-width: 260px; text-align: center; }
+</style>
+
+<div id="chrome">
+  <div class="url">leetcode.com/problems/two-sum/</div>
+  <button id="ext-icon" title="vim-overlay">V<span class="dot"></span></button>
+</div>
+<div id="popup">
+  <h3>vim-overlay <small>leetcode.com</small></h3>
+  <div class="row live">
+    <div><div class="name">relative-numbers</div><div class="desc">Count column beside the line numbers</div></div>
+    <button class="switch" id="popup-switch" role="switch" aria-checked="true"></button>
+  </div>
+  <div class="row dead"><div><div class="name">clipboard</div><div class="desc">Yanks also copy to the system clipboard</div></div><button class="switch" aria-checked="true" disabled></button></div>
+  <div class="row dead"><div><div class="name">complete</div><div class="desc">Ctrl-N / Ctrl-P word completion</div></div><button class="switch" aria-checked="true" disabled></button></div>
+  <div class="row dead"><div><div class="name">move-lines</div><div class="desc">Ctrl-J / Ctrl-K move lines</div></div><button class="switch" aria-checked="true" disabled></button></div>
+  <div class="scope">
+    Apply to: <label><input type="radio" name="scope" value="site" checked /> this site</label>
+    <label><input type="radio" name="scope" value="all" /> all sites</label>
+  </div>
+</div>
+
+<div id="app">
+  <div class="pane">
+    <div class="pane-head"><b>Description</b> Editorial Solutions</div>
+    <div class="problem">
+      <h2>1. Two Sum</h2>
+      <p>Given an array of integers <code>nums</code> and an integer <code>target</code>, return indices of the two numbers such that they add up to <code>target</code>.</p>
+      <p>You may assume that each input would have exactly one solution, and you may not use the same element twice.</p>
+    </div>
+  </div>
+  <div class="pane">
+    <div class="pane-head"><b>Code</b> Python3 ▾ · Vim</div>
+    <div id="editor"></div>
+    <div id="statusrow"><div id="status"></div><button id="pill" title="Toggle relative numbers">rnu <span class="n">on</span></button></div>
+    <div id="side"><div id="hint"></div><div id="state"></div></div>
+  </div>
+</div>
+
+<div id="switcher"><button id="prev" title="Previous variant (←)">‹</button><span id="label"></span><button id="next" title="Next variant (→)">›</button></div>
+
+<script>
+  const VARIANTS = {
+    A: {
+      name: "Vim option :set rnu",
+      hint: `<h4>A. Vim-native option</h4>
+        Press <kbd>Esc</kbd> in the editor, then type:
+        <ul><li><code>:set nornu</code> hides the column</li><li><code>:set rnu</code> shows it (long form <code>:set relativenumber</code>)</li>
+        <li><code>:set rnu?</code> prints the current value</li></ul>
+        <div class="cost">No visible UI. Real cost: one <code>Vim.defineOption</code> in the feature. vim.js has no <code>:set rnu!</code> or <code>invrnu</code>, so there is no one-word toggle. Resets on reload unless it is saved somewhere.</div>`,
+    },
+    B: {
+      name: "Status-line pill",
+      hint: `<h4>B. Pill in the Vim status line</h4>
+        Click the <code>rnu on</code> pill at the right of the status line under the editor.
+        <div class="cost">Always visible, states the current value, one click. Real cost: inserting into each site's status bar; LeetCode, CodeSignal and CoderPad each draw their own, so placement differs per site. Clutters a line people already watch.</div>`,
+    },
+    C: {
+      name: "Toolbar popup",
+      hint: `<h4>C. Extension toolbar popup</h4>
+        Click the <b>V</b> icon at the top right of the fake browser bar. The dot shows on/off.
+        <ul><li>One switch per feature (only <code>relative-numbers</code> is live here)</li><li>Scope: this site or all sites</li></ul>
+        <div class="cost">Out of the editor; scales to every feature and is the only one that naturally remembers the choice. Real cost: an action popup, <code>chrome.storage</code>, and an isolated-world script to pass settings to the MAIN-world script. The biggest change of the four.</div>`,
+    },
+    D: {
+      name: "Click the column",
+      hint: `<h4>D. The column is the switch</h4>
+        Click any orange number to hide the column. A thin dotted strip stays; hover it (a <code>#</code> appears) and click to bring the numbers back.
+        <div class="cost">Zero extra chrome, toggles where you look. Real cost: Monaco's <code>onMouseDown</code> with the line-decorations target, already Monaco-only like the feature. Undiscoverable until you know; easy to hit by accident when clicking near the line numbers.</div>`,
+    },
+  };
+  const keys = Object.keys(VARIANTS);
+  const params = new URLSearchParams(location.search);
+  const variant = keys.includes(params.get("variant")) ? params.get("variant") : "A";
+  document.body.classList.add("v-" + variant);
+  document.getElementById("hint").innerHTML = VARIANTS[variant].hint;
+  document.getElementById("label").textContent = `${variant} (${VARIANTS[variant].name}) · ${keys.indexOf(variant) + 1}/${keys.length}`;
+  const go = (step) => {
+    const next = keys[(keys.indexOf(variant) + step + keys.length) % keys.length];
+    params.set("variant", next);
+    location.search = params.toString();
+  };
+  document.getElementById("prev").onclick = () => go(-1);
+  document.getElementById("next").onclick = () => go(1);
+  addEventListener("keydown", (e) => {
+    const t = e.target;
+    if (t.closest?.("input, textarea, [contenteditable], .monaco-editor")) return;
+    if (e.key === "ArrowLeft") go(-1);
+    if (e.key === "ArrowRight") go(1);
+  });
+
+  // Shared fake toggle state, rendered after every change.
+  const state = { variant, relativenumber: true, columnShown: false, lastChange: "(none)", history: [] };
+  let editor;
+  function renderState() {
+    document.getElementById("state").textContent = JSON.stringify(state, null, 1);
+    document.getElementById("pill").querySelector(".n").textContent = state.relativenumber ? "on" : "off";
+    document.getElementById("popup-switch").setAttribute("aria-checked", state.relativenumber);
+  }
+  function applyWidth() {
+    if (!editor || !state.columnShown) return;
+    editor.updateOptions({ lineDecorationsWidth: state.relativenumber ? "4.5ch" : variant === "D" ? "1.2ch" : 10 });
+  }
+  function setRel(on, via) {
+    state.relativenumber = !!on;
+    state.lastChange = via;
+    state.history = [`${on ? "on " : "off"} via ${via}`, ...state.history].slice(0, 6);
+    document.body.classList.toggle("rel-off", !on);
+    applyWidth();
+    renderState();
+  }
+  renderState();
+
+  // Variant B and C controls.
+  document.getElementById("pill").onclick = () => { setRel(!state.relativenumber, "status pill"); editor?.focus(); };
+  const popup = document.getElementById("popup"), icon = document.getElementById("ext-icon");
+  icon.onclick = (e) => { e.stopPropagation(); popup.classList.toggle("open"); icon.classList.toggle("open"); };
+  addEventListener("click", (e) => { if (!popup.contains(e.target) && e.target !== icon) { popup.classList.remove("open"); icon.classList.remove("open"); } });
+  document.getElementById("popup-switch").onclick = () => setRel(!state.relativenumber, "toolbar popup (" + document.querySelector("[name=scope]:checked").value + ")");
+</script>
+<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
+<script>
+  require.config({
+    paths: {
+      vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs",
+      "monaco-vim": "https://cdn.jsdelivr.net/npm/monaco-vim@0.4.4/dist/monaco-vim.umd",
+    },
+  });
+  require(["vs/editor/editor.main"], () => {
+    define("monaco-editor/esm/vs/editor/editor.api", [], () => monaco);
+    require(["monaco-vim"], (MonacoVim) => {
+      editor = monaco.editor.create(document.getElementById("editor"), {
+        value: [
+          "class Solution:",
+          "    def twoSum(self, nums: List[int], target: int) -> List[int]:",
+          "        seen = {}",
+          "        for i, n in enumerate(nums):",
+          "            want = target - n",
+          "            if want in seen:",
+          "                return [seen[want], i]",
+          "            seen[n] = i",
+          "        return []",
+          "",
+          "",
+          "def brute_force(nums, target):",
+          "    for i in range(len(nums)):",
+          "        for j in range(i + 1, len(nums)):",
+          "            if nums[i] + nums[j] == target:",
+          "                return [i, j]",
+          "    return []",
+          "",
+          "",
+          "if __name__ == \"__main__\":",
+          "    print(Solution().twoSum([2, 7, 11, 15], 9))",
+          "    print(brute_force([3, 2, 4], 6))",
+        ].join("\n"),
+        language: "python",
+        theme: "vs-dark",
+        tabSize: 4,
+        fontSize: 14,
+        minimap: { enabled: false },
+        scrollBeyondLastLine: false,
+      });
+      const adapter = MonacoVim.initVimMode(editor, document.getElementById("status"));
+      const Vim = MonacoVim.VimMode.Vim;
+      window.monacoVim = MonacoVim; // the host the real extension looks for, set now instead of LeetCode's 1.5 s
+
+      // Variant A: a real vim.js option.
+      if (variant === "A") {
+        Vim.defineOption("relativenumber", true, "boolean", ["rnu"], (value) => {
+          if (value === undefined) return state.relativenumber;
+          if (value !== state.relativenumber) setRel(value, ":set " + (value ? "rnu" : "nornu"));
+        });
+      }
+      // Variant D: click in the line-decorations margin.
+      if (variant === "D") {
+        editor.onMouseDown((e) => {
+          if (e.target.type === monaco.editor.MouseTargetType.GUTTER_LINE_DECORATIONS) setRel(!state.relativenumber, "click column");
+        });
+      }
+
+      // The feature draws its column on the first key; press one for it once the extension
+      // has installed, so the column is there at load.
+      const original = Vim.findKey;
+      const wait = setInterval(() => {
+        if (Vim.findKey === original) return;
+        clearInterval(wait);
+        Vim.handleKey(adapter, "<Esc>", "user");
+        state.columnShown = true;
+        applyWidth();
+        renderState();
+        editor.focus();
+      }, 100);
+    });
+  });
+</script>
+<script src="../../dist/content.js"></script>
