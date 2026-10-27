@@ -105,7 +105,7 @@ export interface MonacoEditor {
   setSelection(range: MonacoRange): void;
   trigger(source: string, action: string, args: { text: string }): void;
   getAction?(name: string): { run(): unknown; isSupported?(): boolean } | null;
-  getRawOptions?(): { lineDecorationsWidth?: string | number };
+  getRawOptions?(): { lineDecorationsWidth?: string | number; folding?: boolean; showFoldingControls?: string };
   updateOptions(options: { lineDecorationsWidth: string | number }): void;
   createDecorationsCollection?(): { set(decorations: Decoration[]): void };
   deltaDecorations(ids: string[], decorations: Decoration[]): string[];

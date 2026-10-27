@@ -18,6 +18,11 @@ function addStyle() {
   style.textContent =
     `.${CLASS}{box-sizing:border-box;padding-right:0.8ch;text-align:right;color:#d19a66}` +
     `.${CLASS}-0{opacity:0.5}` +
+    // Monaco widens this margin by 16 px for the folding arrows and centers each arrow in it, on
+    // top of the numbers. The arrows move to that 16 px at the right, next to the code, and the
+    // numbers stop short of it.
+    `.margin-view-overlays:has(.${CLASS}) .cldr[class*="codicon-folding-"]{justify-content:flex-end}` +
+    `.${CLASS}-fold{padding-right:calc(0.8ch + 16px)}` +
     Array.from({ length: MAX + 1 }, (_, n) => `.${CLASS}-${n}::before{content:"${n}"}`).join("");
   (document.head || document.documentElement).append(style);
 }
@@ -41,12 +46,15 @@ function show(editor: MonacoEditor, isOn: () => boolean, renders: Set<() => void
     const model = editor.getModel();
     const cur = editor.getPosition()?.lineNumber;
     const decorations: Decoration[] = [];
+    // Monaco leaves room for the arrows unless folding or its controls are off.
+    const raw = editor.getRawOptions?.();
+    const fold = raw?.folding !== false && raw?.showFoldingControls !== "never" ? ` ${CLASS}-fold` : "";
     if (on && model && cur) {
       const first = Math.max(1, cur - MAX);
       const last = Math.min(model.getLineCount(), cur + MAX);
       for (let n = first; n <= last; n++) {
         const range = { startLineNumber: n, startColumn: 1, endLineNumber: n, endColumn: 1 };
-        decorations.push({ range, options: { linesDecorationsClassName: `${CLASS} ${CLASS}-${Math.abs(n - cur)}` } });
+        decorations.push({ range, options: { linesDecorationsClassName: `${CLASS} ${CLASS}-${Math.abs(n - cur)}${fold}` } });
       }
     }
     if (collection) collection.set(decorations);
