@@ -67,6 +67,9 @@ export interface VimApi {
   mapCommand(keys: string, type: "motion" | "action" | "operator", name: string,
     args?: Record<string, string | boolean | number>, options?: { context?: string; isEdit?: boolean }): void;
   map(lhs: string, rhs: string, context: string): void;
+  // vim.js reads a value by calling the callback with no value and sets one by calling it with the value.
+  defineOption(name: string, defaultValue: undefined, type: "boolean", aliases: string[],
+    callback: (value?: boolean) => boolean | undefined): void;
   findKey: FindKey;
   getRegisterController(): RegisterController;
   // Private vim.js macro record used to keep completion compatible with dot repeat.
@@ -102,7 +105,8 @@ export interface MonacoEditor {
   setSelection(range: MonacoRange): void;
   trigger(source: string, action: string, args: { text: string }): void;
   getAction?(name: string): { run(): unknown; isSupported?(): boolean } | null;
-  updateOptions(options: { lineDecorationsWidth: string }): void;
+  getRawOptions?(): { lineDecorationsWidth?: string | number };
+  updateOptions(options: { lineDecorationsWidth: string | number }): void;
   createDecorationsCollection?(): { set(decorations: Decoration[]): void };
   deltaDecorations(ids: string[], decorations: Decoration[]): string[];
   getPosition(): { lineNumber: number } | null;
