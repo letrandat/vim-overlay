@@ -47,6 +47,7 @@ function scan(lines: string[]) {
   let current: Logical | null = null;
   lines.forEach((text, n) => {
     let code = text, comment: string | null = null;
+    let escapesNewline = false; // a string's backslash is the line's last character
     const semis: number[] = [];
     for (let i = 0; i < text.length; ) {
       const top = open.at(-1);
@@ -55,6 +56,7 @@ function scan(lines: string[]) {
         if (c === "\\") {
           // A backslash keeps the next character from ending the string, but never escapes a
           // field's brace; \N{...} names a character in a string that is not raw.
+          if (i === text.length - 1) escapesNewline = true;
           const close = top.fields && !top.raw && text.startsWith("N{", i + 1) ? text.indexOf("}", i + 3) : -1;
           i = close >= 0 ? close + 1 : top.fields && "{}".includes(text[i + 1]) ? i + 1 : i + 2;
         } else if (text.startsWith(top.quote, i)) (i += top.quote.length), open.pop();
@@ -93,7 +95,10 @@ function scan(lines: string[]) {
         i++;
       }
     }
-    const continued = code.endsWith("\\"); // a backslash continues a line only as its last character
+    // A backslash continues a line only as its last character, and in a string only one that no
+    // other backslash escapes, as in 'x\\' at the end of a line, which is closed nowhere.
+    const last = open.at(-1);
+    const continued = last && "quote" in last ? escapesNewline : code.endsWith("\\");
     // A one-line string open at the end of its line is an error. A replacement field can run on
     // to the next line, even in a one-line f-string.
     if (!continued && oneLine(open.at(-1))) broken = true;

@@ -607,6 +607,26 @@
    "output": "import b, \\ \n  a\nimport c\n"
   },
   {
+   "name": "two backslashes do not continue a string",
+   "input": "s = 'x\\\\\n'\nimport b\nimport a\n",
+   "output": "s = 'x\\\\\n'\nimport b\nimport a\n"
+  },
+  {
+   "name": "two backslashes do not continue a raw, f- or t-string",
+   "input": "s = r'x\\\\\n'\nimport b\nimport a\n",
+   "output": "s = r'x\\\\\n'\nimport b\nimport a\n"
+  },
+  {
+   "name": "one backslash continues a one-line string",
+   "input": "s = 'x\\\n'\nimport b\nimport a\n",
+   "output": "s = 'x\\\n'\nimport a\nimport b\n"
+  },
+  {
+   "name": "three backslashes continue a one-line string",
+   "input": "s = f'x\\\\\\\n'\nimport b\nimport a\n",
+   "output": "s = f'x\\\\\\\n'\nimport a\nimport b\n"
+  },
+  {
    "name": "combining marks in names",
    "input": "from x import é, a\nimport b́\nimport a\n",
    "output": "import a\nimport b́\nfrom x import a, é\n"
