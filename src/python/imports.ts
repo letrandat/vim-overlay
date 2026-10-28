@@ -4,9 +4,9 @@ import { STDLIB } from "./stdlib.ts";
 // what Zed's organize imports runs for Python through ruff. Each run of import statements in one
 // body is a block; comments and blank lines inside it do not end it, any other statement does.
 // The steps follow ruff's crates/ruff_linter/src/rules/isort: annotate (attach comments),
-// normalize (merge statements), categorize (sections), order, format. It reads no settings: of the
-// directives it honors only those that turn sorting off for the file, and it detects no
-// first-party modules.
+// normalize (merge statements), categorize (sections), order, format. It reads no settings, so
+// only __main__ is first-party; of the directives it honors only those that turn sorting off for
+// the file.
 const LINE_LENGTH = 88;
 // Python identifiers: Unicode ID_Start (or _) then ID_Continue, which takes combining marks.
 const NAME = String.raw`[\p{ID_Start}_][\p{ID_Continue}]*`;
@@ -14,7 +14,14 @@ const DOTTED = new RegExp(String.raw`^${NAME}(?:\.${NAME})*$`, "u");
 const IDENT = new RegExp(`^${NAME}$`, "u");
 
 // One statement or more, over physical lines start..end, with each line's code and comment.
-interface Logical { start: number; end: number; indent: string; lines: { code: string; comment: string | null }[] }
+// semis: where a semicolon outside strings and brackets ends a statement.
+interface Logical {
+  start: number;
+  end: number;
+  indent: string;
+  lines: { code: string; comment: string | null }[];
+  semis: { line: number; col: number }[];
+}
 
 // A string open at the scan position, or a replacement field inside an f-string or t-string,
 // where code runs again and strings can nest with the same quotes (Python 3.12). brackets: those
@@ -33,11 +40,13 @@ function scan(lines: string[]) {
   let broken = false;
   const logicals: Logical[] = [];
   const comments = new Map<number, string>(); // comment-only lines
+  const every: { text: string; own: boolean }[] = []; // every comment, and whether it has a line to itself
   const open: Open[] = [];
   let depth = 0;
   let current: Logical | null = null;
   lines.forEach((text, n) => {
     let code = text, comment: string | null = null;
+    const semis: number[] = [];
     for (let i = 0; i < text.length; ) {
       const top = open.at(-1);
       const c = text[i];
@@ -61,7 +70,10 @@ function scan(lines: string[]) {
         i++;
       } else if (c === "#") {
         // In a replacement field, a comment also runs to the end of the line.
-        if (!top) (code = text.slice(0, i)), (comment = text.slice(i).trimEnd());
+        if (!top) {
+          (code = text.slice(0, i)), (comment = text.slice(i).trimEnd());
+          every.push({ text: comment, own: !code.trim() });
+        }
         break;
       } else if (c === '"' || c === "'") {
         const quote = text.startsWith(c.repeat(3), i) ? c.repeat(3) : c;
@@ -78,6 +90,7 @@ function scan(lines: string[]) {
       } else {
         if ("([{".includes(c)) depth++;
         else if (")]}".includes(c)) depth = Math.max(0, depth - 1);
+        else if (c === ";" && !depth) semis.push(i);
         i++;
       }
     }
@@ -89,13 +102,14 @@ function scan(lines: string[]) {
       if (comment) comments.set(n, comment);
       return;
     }
-    current ??= { start: n, end: n, indent: text.match(/^\s*/)![0], lines: [] };
+    current ??= { start: n, end: n, indent: text.match(/^\s*/)![0], lines: [], semis: [] };
     current.lines.push({ code, comment });
+    current.semis.push(...semis.map((col) => ({ line: n, col })));
     current.end = n;
     if (!open.length && !depth && !continued) logicals.push(current), (current = null);
   });
   if (current) logicals.push(current);
-  return { logicals, comments, broken: broken || open.length > 0 || depth > 0 || !!current };
+  return { logicals, comments, every, broken: broken || open.length > 0 || depth > 0 || !!current };
 }
 
 interface Alias { name: string; as: string | null; line: number; atop: string[]; inline: string[]; trailing: string[] }
@@ -110,68 +124,99 @@ interface Statement {
   comma: boolean; // a trailing comma inside parentheses keeps the statement split, as ruff does
   start: number; // the lines of its first and last token
   end: number;
+  endCol: number; // where its last token ends on line end
 }
 
-// The statements of a logical line that holds only imports, or null.
-function parse(logical: Logical): Statement[] | null {
-  const tokens: { text: string; line: number }[] = [];
+interface Token { text: string; line: number; col: number }
+const TOKEN = /[\p{ID_Continue}.]+|[*,();]|\S/gu;
+const KEYWORDS = new Set(["import", "as"]);
+
+// The statements of a logical line, split at its semicolons: each an import, or null for any
+// other statement. None for a line with no tokens, such as a backslash before a blank line.
+function parse(logical: Logical): (Statement | null)[] {
+  const parts: Token[][] = [[]];
   for (const [i, { code }] of logical.lines.entries()) {
-    for (const m of code.replace(/\\\s*$/, "").matchAll(/[\p{ID_Continue}.]+|[*,();]|\S/gu)) tokens.push({ text: m[0], line: logical.start + i });
+    const line = logical.start + i;
+    for (const m of code.replace(/\\\s*$/, "").matchAll(TOKEN)) {
+      if (logical.semis.some((s) => s.line === line && s.col === m.index)) parts.push([]);
+      else parts.at(-1)!.push({ text: m[0], line, col: m.index });
+    }
   }
-  const statements: Statement[] = [];
+  return parts.filter((tokens) => tokens.length).map((tokens) => statement(tokens, logical));
+}
+
+// One import statement from its tokens, or null if they are anything else.
+function statement(tokens: Token[], logical: Logical): Statement | null {
   let t = 0;
   const peek = () => tokens[t]?.text;
-  const alias = (allowStar: boolean): Alias | null => {
-    const name = tokens[t];
-    if (!name || !(DOTTED.test(name.text) || (allowStar && name.text === "*"))) return null;
-    t++;
+  // A dotted name, which Python lets spaces split around its dots; ruff keeps its source text.
+  const dotted = () => {
+    const run = [tokens[t++]];
+    while (tokens[t] && !KEYWORDS.has(tokens[t].text) && (run.at(-1)!.text.endsWith(".") || tokens[t].text.startsWith("."))) run.push(tokens[t++]);
+    const [first, last] = [run[0], run.at(-1)!];
+    const source = first.line === last.line
+      ? logical.lines[first.line - logical.start].code.slice(first.col, last.col + last.text.length)
+      : run.map((r) => r.text).join("");
+    return { joined: run.map((r) => r.text).join(""), source, line: first.line };
+  };
+  const alias = (from: boolean, star: boolean): Alias | null => {
+    if (!tokens[t]) return null;
+    let name: string, line: number;
+    if (from) {
+      ({ text: name, line } = tokens[t++]);
+      if (!IDENT.test(name) && !(star && name === "*")) return null;
+    } else {
+      const d = dotted();
+      if (!DOTTED.test(d.joined)) return null;
+      ({ source: name, line } = d);
+    }
     let as: string | null = null;
     if (peek() === "as") {
       t++;
       if (!IDENT.test(peek() ?? "")) return null;
       as = tokens[t++].text;
     }
-    return { name: name.text, as, line: name.line, atop: [], inline: [], trailing: [] };
+    return { name, as, line, atop: [], inline: [], trailing: [] };
   };
-  while (t < tokens.length) {
-    const { text: keyword, line: start } = tokens[t++];
-    const statement: Statement = { from: keyword === "from", module: "", level: 0, aliases: [], atop: [], inline: [], trailing: [], comma: false, start, end: start };
-    if (keyword === "import") {
-      do {
-        const a = alias(false);
-        if (!a) return null;
-        statement.aliases.push(a);
-      } while (peek() === "," && ++t);
-    } else if (keyword === "from") {
-      const module = tokens[t++]?.text ?? "";
-      const m = /^(\.*)(.*)$/.exec(module)!;
-      if (m[2] && !DOTTED.test(m[2])) return null;
-      if (!m[1] && !m[2]) return null;
-      [statement.level, statement.module] = [m[1].length, m[2]];
-      if (tokens[t++]?.text !== "import") return null;
-      const parens = peek() === "(" && ++t;
-      do {
-        if (parens && peek() === ")") break; // after a trailing comma
-        const a = alias(!parens && !statement.aliases.length);
-        if (!a) return null;
-        statement.aliases.push(a);
-        if (a.name === "*") break;
-      } while (peek() === "," && ++t);
-      if (parens) {
-        statement.comma = tokens[t - 1]?.text === ",";
-        if (tokens[t++]?.text !== ")") return null;
-      }
-      if (!statement.aliases.length) return null;
-    } else return null;
-    statement.end = tokens[t - 1].line;
-    statements.push(statement);
-    if (t < tokens.length && tokens[t++].text !== ";") return null;
-  }
-  return statements;
+  const { text: keyword, line: start } = tokens[t++];
+  const s: Statement = { from: keyword === "from", module: "", level: 0, aliases: [], atop: [], inline: [], trailing: [], comma: false, start, end: start, endCol: 0 };
+  if (keyword === "import") {
+    do {
+      const a = alias(false, false);
+      if (!a) return null;
+      s.aliases.push(a);
+    } while (peek() === "," && ++t);
+  } else if (keyword === "from") {
+    if (!tokens[t] || peek() === "import") return null;
+    const { joined, source } = dotted();
+    const m = /^(\.*)(.*)$/.exec(joined)!;
+    if (m[2] && !DOTTED.test(m[2])) return null;
+    if (!m[1] && !m[2]) return null;
+    [s.level, s.module] = [m[1].length, source.replace(/^[.\s]*/, "")];
+    if (tokens[t++]?.text !== "import") return null;
+    const parens = peek() === "(" && ++t;
+    do {
+      if (parens && peek() === ")") break; // after a trailing comma
+      const a = alias(true, !parens && !s.aliases.length);
+      if (!a) return null;
+      s.aliases.push(a);
+      if (a.name === "*") break;
+    } while (peek() === "," && ++t);
+    if (parens) {
+      s.comma = tokens[t - 1]?.text === ",";
+      if (tokens[t++]?.text !== ")") return null;
+    }
+    if (!s.aliases.length) return null;
+  } else return null;
+  if (t < tokens.length) return null;
+  const last = tokens[t - 1];
+  [s.end, s.endCol] = [last.line, last.col + last.text.length];
+  return s;
 }
 
 // Attaches the comments of a logical line to its statements in order, as ruff's annotate_imports
 // does: each statement takes the comments up to the end of its last line before the next one does.
+// Returns those left after the last statement, on continuation lines, which go above the next.
 function annotate(statements: Statement[], logical: Logical) {
   const comments = logical.lines
     .map(({ comment }, i) => comment && { line: logical.start + i, text: comment })
@@ -196,6 +241,7 @@ function annotate(statements: Statement[], logical: Logical) {
     s.aliases.at(-1)!.trailing = take((line) => line < s.end);
     s.trailing = take((line) => line === s.end);
   }
+  return comments.map((c) => c.text);
 }
 
 // natord::compare, as ruff orders names: digit runs compare as numbers.
@@ -361,7 +407,7 @@ const blank = (s: string) => !s.trim();
 // def or class, unless a comment set apart by a blank line comes between (has_comment_break),
 // else one.
 function linesAfter(lines: string[], next: Logical) {
-  if (!/^(?:@|def\s|async\s+def\s|class\s)/.test(lines[next.start])) return 1;
+  if (!/^(?:@|def\s|async\s+def\s|class\s)/.test(lines[next.start].slice(next.indent.length))) return 1;
   let seenBlank = false;
   for (let n = next.start - 1; n >= 0; n--) {
     const line = lines[n].trim();
@@ -374,16 +420,45 @@ function linesAfter(lines: string[], next: Logical) {
   return 2;
 }
 
-// File-level comments that keep ruff from sorting: a blanket noqa, one naming I001, or isort's.
-const OFF = /^#\s*(?:(?:ruff|flake8)\s*:\s*noqa\s*$|ruff\s*:\s*noqa\s*:.*\bI001\b|isort\s*:\s*skip_file\b)/i;
+// isort's skip_file, in any comment, as ruff spells it.
+const SKIP_FILE = new Set(["# isort: skip_file", "# isort:skip_file", "# ruff: isort: skip_file", "# ruff: isort:skip_file"]);
+
+// Whether a comment turns import sorting off for the file, as ruff reads it: isort's skip_file,
+// or a file-level noqa on a line of its own (ruff's lex_file_exemption) that is blanket or whose
+// codes name I001.
+function turnsSortingOff({ text, own }: { text: string; own: boolean }) {
+  if (SKIP_FILE.has(text)) return true;
+  const noqa = own && /#\s*(?:ruff|flake8)\s*:\s*[nN][oO][qQ][aA]/.exec(text);
+  if (!noqa) return false;
+  const rest = text.slice(noqa.index + noqa[0].length);
+  if (!rest || rest[0] === "#" || (/^\s/.test(rest) && !rest.trimStart().startsWith(":"))) return true;
+  if (!/^\s*:/.test(rest)) return false; // such as noqaX, which ruff rejects
+  // Codes run until the first word that is not one.
+  const code = /[\s,]*([A-Z]+[0-9]+)/y;
+  code.lastIndex = rest.indexOf(":") + 1;
+  for (let m; (m = code.exec(rest)); ) if (m[1] === "I001") return true;
+  return false;
+}
+
+// Whether a statement's line goes on past it with more than a comment: a semicolon or a backslash.
+function followed(lines: string[], s: Statement) {
+  for (const c of lines[s.end].slice(s.endCol)) {
+    if (c === "#") return false;
+    if (!" \t\f".includes(c)) return true;
+  }
+  return false;
+}
 
 // The buffer with every import block sorted; for each old line, the new line it became, or for a
 // line in a sorted block, the line at the same offset in the new block; and why the whole buffer
 // was left alone, if it was.
-export function organizeImports(lines: string[]) {
-  const { logicals, comments, broken } = scan(lines);
-  const untouched = broken ? "a string or bracket is not closed" : [...comments.values()].some((c) => OFF.test(c)) ? "the file turns off import sorting" : null;
-  if (untouched) return { lines: [...lines], lineMap: lines.map((_, i) => i), untouched };
+export function organizeImports(buffer: string[]) {
+  // ruff reads a file without its byte order mark and writes the mark back.
+  const bom = buffer[0]?.startsWith("﻿") ? "﻿" : "";
+  const lines = bom ? [buffer[0].slice(1), ...buffer.slice(1)] : buffer;
+  const { logicals, comments, every, broken } = scan(lines);
+  const untouched = broken ? "a string or bracket is not closed" : every.some(turnsSortingOff) ? "the file turns off import sorting" : null;
+  if (untouched) return { lines: [...buffer], lineMap: buffer.map((_, i) => i), untouched };
   const unit = logicals.map((l) => level(l.indent)).find((indent) => indent) ?? "    ";
   const out: string[] = [];
   const lineMap: number[] = [];
@@ -391,40 +466,55 @@ export function organizeImports(lines: string[]) {
   const copy = (to: number) => {
     for (; copied < to; copied++) lineMap.push(out.push(lines[copied]) - 1);
   };
-  let block: { logicals: Logical[]; statements: Statement[] } | null = null;
+  // fixable: ruff flags but leaves a block that starts after other code on its line or on a
+  // continuation line, or that ends where its line goes on (see followed).
+  let block: { logicals: Logical[]; statements: Statement[]; fixable: boolean } | null = null;
+  let pending: string[] = []; // comments left on the last statement's continuation lines
 
   const finish = (next: Logical | undefined) => {
     if (!block) return;
     const first = block.logicals[0], last = block.logicals.at(-1)!;
-    let end = last.end + 1;
-    const after = next && !level(first.indent) ? linesAfter(lines, next) : 0;
-    if (after) while (blank(lines[end])) end++;
-    copy(first.start);
-    const start = out.length;
-    out.push(...format(block.statements, first.indent, unit).map((s) => (s ? first.indent + s : s)));
-    for (let i = 0; i < after; i++) out.push("");
-    for (; copied < end; copied++) lineMap.push(Math.min(start + copied - first.start, out.length - 1));
+    if (block.fixable && !followed(lines, block.statements.at(-1)!)) {
+      let end = last.end + 1;
+      const after = next && !level(first.indent) ? linesAfter(lines, next) : 0;
+      if (after) while (blank(lines[end])) end++;
+      copy(first.start);
+      const start = out.length;
+      out.push(...format(block.statements, first.indent, unit).map((s) => (s ? first.indent + s : s)));
+      for (let i = 0; i < after; i++) out.push("");
+      for (; copied < end; copied++) lineMap.push(Math.min(start + copied - first.start, out.length - 1));
+    }
     block = null;
+    pending = [];
   };
 
   for (const logical of logicals) {
-    const statements = parse(logical);
-    if (!statements) {
-      finish(logical);
+    const parts = parse(logical);
+    if (!parts.length) {
+      // A backslash before a blank or comment line holds nothing; its comments go above the next import.
+      if (block) pending.push(...logical.lines.flatMap((l) => (l.comment ? [l.comment] : [])));
       continue;
     }
-    if (!statements.length) continue; // a backslash before a blank line: nothing, as in Python
-    if (block && level(block.logicals[0].indent) !== level(logical.indent)) finish(logical);
-    block ??= { logicals: [], statements: [] };
-    // Comment lines since the previous statement go above this one; before the first, they stay.
-    const prev = block.logicals.at(-1);
-    const atop = prev ? [...comments.entries()].filter(([n]) => n > prev.end && n < logical.start).map(([, c]) => c) : [];
-    statements[0].atop = atop;
-    annotate(statements, logical);
-    block.logicals.push(logical);
-    block.statements.push(...statements);
+    // Comments are placed only on lines that hold nothing but imports; a block that takes a
+    // statement from any other line is left as it is.
+    const leftover = parts.every((s) => s) ? annotate(parts as Statement[], logical) : [];
+    parts.forEach((s, k) => {
+      if (!s) return finish(logical);
+      if (block && level(block.logicals[0].indent) !== level(logical.indent)) finish(logical);
+      block ??= { logicals: [], statements: [], fixable: k === 0 && s.start === logical.start };
+      const prev = block.logicals.at(-1);
+      if (prev !== logical) {
+        // Comment lines since the previous statement go above this one; before the first, they stay.
+        const between = prev ? [...comments.entries()].filter(([n]) => n > prev.end && n < logical.start).map(([, c]) => c) : [];
+        if (prev) s.atop.unshift(...pending, ...between);
+        block.logicals.push(logical);
+      }
+      block.statements.push(s);
+    });
+    pending = leftover;
   }
   finish(undefined);
   copy(lines.length);
+  if (bom) out[0] = bom + out[0];
   return { lines: out, lineMap, untouched };
 }

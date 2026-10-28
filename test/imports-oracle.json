@@ -367,6 +367,131 @@
    "output": "from __future__ import nested_scopes  # noqa: F401\n\nimport site\n\nimport a\nimport b  # c\nimport z  # cw\nfrom w import u, v\nfrom x import d  # cf\nfrom y import (\n    e,  # ce\n    f,\n)\n"
   },
   {
+   "name": "a comment after a backslash goes above the next import",
+   "input": "import b \\\n# keep this comment\nimport a\nfrom x import a \\\n# c\nimport b\n",
+   "output": "# keep this comment\nimport a\n\n# c\nimport b\nfrom x import a\n"
+  },
+  {
+   "name": "a block ending in a backslash is left as is",
+   "input": "import b\nimport a \\\n# c\nx = 1\nimport d\nimport c \\\n# c\n",
+   "output": "import b\nimport a \\\n# c\nx = 1\nimport d\nimport c \\\n# c\n"
+  },
+  {
+   "name": "backslash lines holding nothing but a comment",
+   "input": "import b \\\n\\\n# c\nimport a\nimport d\n\\\n# e\nimport c\n",
+   "output": "# c\nimport a\nimport b\n\n# e\nimport c\nimport d\n"
+  },
+  {
+   "name": "blocks sharing a line with other code are left as is",
+   "input": "x = 1; import c\nimport b\nimport a\ny = 2\nimport e\nimport d; z = 3\nimport g; w = 4\nimport f\nimport e\n",
+   "output": "x = 1; import c\nimport b\nimport a\ny = 2\nimport e\nimport d; z = 3\nimport g; w = 4\nimport e\nimport f\n"
+  },
+  {
+   "name": "a trailing semicolon",
+   "input": "import a;\nimport c\nimport b\n",
+   "output": "import a\nimport b\nimport c\n"
+  },
+  {
+   "name": "isort skip_file after code",
+   "input": "import b  # isort: skip_file\nimport a\n",
+   "output": "import b  # isort: skip_file\nimport a\n"
+  },
+  {
+   "name": "isort skip_file without the space",
+   "input": "import b\nimport a  # isort:skip_file\n",
+   "output": "import b\nimport a  # isort:skip_file\n"
+  },
+  {
+   "name": "ruff skip_file",
+   "input": "# ruff: isort: skip_file\nimport b\nimport a\n",
+   "output": "# ruff: isort: skip_file\nimport b\nimport a\n"
+  },
+  {
+   "name": "a blanket noqa with a note",
+   "input": "# ruff: noqa  # generated file\nimport b\nimport a\n",
+   "output": "# ruff: noqa  # generated file\nimport b\nimport a\n"
+  },
+  {
+   "name": "a flake8 noqa naming I001",
+   "input": "# flake8: noqa: I001\nimport b\nimport a\n",
+   "output": "# flake8: noqa: I001\nimport b\nimport a\n"
+  },
+  {
+   "name": "a flake8 noqa naming other codes",
+   "input": "# flake8: noqa: E501\nimport b\nimport a\n",
+   "output": "# flake8: noqa: E501\nimport a\nimport b\n"
+  },
+  {
+   "name": "noqa in capitals",
+   "input": "# ruff: NOQA\nimport b\nimport a\n",
+   "output": "# ruff: NOQA\nimport b\nimport a\n"
+  },
+  {
+   "name": "noqa codes without spaces",
+   "input": "#ruff:noqa:E501,I001\nimport b\nimport a\n",
+   "output": "#ruff:noqa:E501,I001\nimport b\nimport a\n"
+  },
+  {
+   "name": "noqa codes split by spaces",
+   "input": "# ruff: noqa: E501 I001\nimport b\nimport a\n",
+   "output": "# ruff: noqa: E501 I001\nimport b\nimport a\n"
+  },
+  {
+   "name": "noqa after code is not file-level",
+   "input": "import b  # ruff: noqa\nimport a\n",
+   "output": "import a\nimport b  # ruff: noqa\n"
+  },
+  {
+   "name": "a misspelled noqa",
+   "input": "# ruff: noqaX\nimport b\nimport a\n",
+   "output": "# ruff: noqaX\nimport a\nimport b\n"
+  },
+  {
+   "name": "an indented noqa on its own line",
+   "input": "def f():\n    # ruff: noqa\n    import b\n    import a\n",
+   "output": "def f():\n    # ruff: noqa\n    import b\n    import a\n"
+  },
+  {
+   "name": "noqa after another comment",
+   "input": "# note # ruff: noqa\nimport b\nimport a\n",
+   "output": "# note # ruff: noqa\nimport b\nimport a\n"
+  },
+  {
+   "name": "a byte order mark",
+   "input": "﻿import sys, os\n",
+   "output": "﻿import os\nimport sys\n"
+  },
+  {
+   "name": "a byte order mark before a noqa",
+   "input": "﻿# ruff: noqa\nimport b\nimport a\n",
+   "output": "﻿# ruff: noqa\nimport b\nimport a\n"
+  },
+  {
+   "name": "a form feed before def",
+   "input": "import sys\nimport os\n\fdef f(): pass\n",
+   "output": "import os\nimport sys\n\n\n\fdef f(): pass\n"
+  },
+  {
+   "name": "spaces around dots",
+   "input": "import z . b\nimport a\nfrom z . b import c\nfrom a import d\nimport a .b, z. c\n",
+   "output": "import a\nimport a .b\nimport z . b\nimport z. c\nfrom a import d\nfrom z . b import c\n"
+  },
+  {
+   "name": "spaces between relative dots",
+   "input": "from . . x import y\nfrom a import d\n",
+   "output": "from a import d\n\nfrom ..x import y\n"
+  },
+  {
+   "name": "a spaced standard library module",
+   "input": "import os . path\nimport sys\n",
+   "output": "import sys\n\nimport os . path\n"
+  },
+  {
+   "name": "a dotted name imported from a module is not valid",
+   "input": "from x import a.b\nimport c\n",
+   "output": "from x import a.b\nimport c\n"
+  },
+  {
    "name": "combining marks in names",
    "input": "from x import é, a\nimport b́\nimport a\n",
    "output": "import a\nimport b́\nfrom x import a, é\n"

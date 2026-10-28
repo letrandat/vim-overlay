@@ -18,6 +18,11 @@ async function after({ page, check, play }) {
   got = await play(SORTED, [1, 2], "<S-A-o>");
   check("sorted imports stay as they are", JSON.stringify(got.lines) === JSON.stringify(SORTED) && JSON.stringify(got.cursor) === "[1,2]", JSON.stringify(got));
 
+  if (kind === "cm5") {
+    // Monaco drops a byte order mark when it loads text; CodeMirror 5 keeps it as a character.
+    got = await play(["\uFEFFimport sys, os"], [0, 1], "<S-A-o>");
+    check("a byte order mark stays on the first line only", JSON.stringify(got.lines) === JSON.stringify(["\uFEFFimport os", "import sys"]), JSON.stringify(got.lines));
+  }
   got = await play(["import b", "import a", "x = (1,"], [0, 0], "<S-A-o>");
   let shown = await page.evaluate(() => document.body.innerText);
   check("a file with a bracket left open is left alone, with a message", JSON.stringify(got.lines) === JSON.stringify(["import b", "import a", "x = (1,"]) && shown.includes("a string or bracket is not closed"), JSON.stringify(got.lines));
