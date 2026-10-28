@@ -627,6 +627,21 @@
    "output": "s = f'x\\\\\\\n'\nimport a\nimport b\n"
   },
   {
+   "name": "an alias named null",
+   "input": "import os\nimport os as null  # keep\nfrom x import a, a as null\nfrom y import b as null, b\nprint(os.name, null.name)\n",
+   "output": "import os\nimport os as null  # keep\n\nfrom x import a\nfrom x import a as null\nfrom y import b\nfrom y import b as null\n\nprint(os.name, null.name)\n"
+  },
+  {
+   "name": "aliases named like JavaScript values",
+   "input": "import undefined\nimport os as undefined\nimport os as __proto__\nimport os as constructor\nimport os\n",
+   "output": "import os\nimport os as __proto__\nimport os as constructor\nimport os as undefined\n\nimport undefined\n"
+  },
+  {
+   "name": "names ordered by code point",
+   "input": "from x import xＦ, x𝐆\nfrom y import y𝐆, yＦ\n",
+   "output": "from x import xＦ, x𝐆\nfrom y import yＦ, y𝐆\n"
+  },
+  {
    "name": "combining marks in names",
    "input": "from x import é, a\nimport b́\nimport a\n",
    "output": "import a\nimport b́\nfrom x import a, é\n"

@@ -131,6 +131,9 @@ module.exports = [
   ["two backslashes do not continue a raw, f- or t-string", "s = r'x\\\\\n'\nimport b\nimport a\n"],
   ["one backslash continues a one-line string", "s = 'x\\\n'\nimport b\nimport a\n"],
   ["three backslashes continue a one-line string", "s = f'x\\\\\\\n'\nimport b\nimport a\n"],
+  ["an alias named null", "import os\nimport os as null  # keep\nfrom x import a, a as null\nfrom y import b as null, b\nprint(os.name, null.name)\n"],
+  ["aliases named like JavaScript values", "import undefined\nimport os as undefined\nimport os as __proto__\nimport os as constructor\nimport os\n"],
+  ["names ordered by code point", "from x import xＦ, x\u{1D406}\nfrom y import y\u{1D406}, yＦ\n"],
   ["combining marks in names", "from x import e\u0301, a\nimport b\u0301\nimport a\n"],
   ["a form feed in the indent", "def f():\n\f    import sys\n    import os\n"],
 ];

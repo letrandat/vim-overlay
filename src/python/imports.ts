@@ -261,23 +261,29 @@ function annotate(statements: Statement[], logical: Logical) {
   return comments.map((c) => c.text);
 }
 
-// natord::compare, as ruff orders names: digit runs compare as numbers.
+// natord::compare, as ruff orders names: digit runs compare as numbers, other characters by code
+// point, as Rust compares chars (JavaScript's < compares UTF-16 units).
 function natord(a: string, b: string) {
+  const [x, y] = [[...a], [...b]];
+  const digit = (c: string | undefined) => !!c && c >= "0" && c <= "9";
   let i = 0, j = 0;
-  while (i < a.length && j < b.length) {
-    if (/\d/.test(a[i]) && /\d/.test(b[j])) {
-      const x = /^\d+/.exec(a.slice(i))![0], y = /^\d+/.exec(b.slice(j))![0];
-      const cmp = x[0] === "0" || y[0] === "0" ? (x < y ? -1 : x > y ? 1 : 0) : x.length - y.length || (x < y ? -1 : x > y ? 1 : 0);
+  while (i < x.length && j < y.length) {
+    if (digit(x[i]) && digit(y[j])) {
+      let p = i, q = j;
+      while (digit(x[p])) p++;
+      while (digit(y[q])) q++;
+      const [m, n] = [x.slice(i, p).join(""), y.slice(j, q).join("")];
+      const cmp = m[0] === "0" || n[0] === "0" ? (m < n ? -1 : m > n ? 1 : 0) : m.length - n.length || (m < n ? -1 : m > n ? 1 : 0);
       if (cmp) return cmp;
-      i += x.length;
-      j += y.length;
+      [i, j] = [p, q];
     } else {
-      if (a[i] !== b[j]) return a[i] < b[j] ? -1 : 1;
+      const cmp = x[i].codePointAt(0)! - y[j].codePointAt(0)!;
+      if (cmp) return cmp;
       i++;
       j++;
     }
   }
-  return (a.length - i) - (b.length - j);
+  return (x.length - i) - (y.length - j);
 }
 
 type Key = (string | number | null)[];
@@ -339,15 +345,15 @@ function normalize(statements: Statement[]) {
   statements.forEach((s, index) => {
     if (!s.from) {
       s.aliases.forEach((a, i) => {
-        const key = `${a.name} ${a.as}`;
+        const key = JSON.stringify([a.name, a.as]); // a missing alias is not the name null
         const entry = straight.get(key) ?? straight.set(key, { name: a.name, as: a.as, atop: [], inline: [], index }).get(key)!;
         if (i === 0) entry.atop.push(...s.atop), entry.inline.push(...s.inline);
       });
       return;
     }
     const group = (a: Alias) => {
-      const kind = a.name === "*" ? "*" : a.as === null ? "" : `${a.name} ${a.as}`;
-      const key = `${s.level} ${s.module} ${kind}`;
+      const kind = a.name === "*" ? "*" : a.as === null ? "" : [a.name, a.as];
+      const key = JSON.stringify([s.level, s.module, kind]);
       return from.get(key) ?? from.set(key, { module: s.module, level: s.level, aliases: new Map(), atop: [], inline: [], trailing: [], comma: false, index }).get(key)!;
     };
     const head = group(s.aliases[0]);
@@ -356,7 +362,7 @@ function normalize(statements: Statement[]) {
     head.trailing.push(...s.trailing);
     for (const a of s.aliases) {
       const g = group(a);
-      const key = `${a.name} ${a.as}`;
+      const key = JSON.stringify([a.name, a.as]);
       const entry = g.aliases.get(key) ?? g.aliases.set(key, { ...a, atop: [], inline: [], trailing: [] }).get(key)!;
       entry.atop.push(...a.atop);
       entry.inline.push(...a.inline);
