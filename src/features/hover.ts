@@ -1,4 +1,5 @@
 import type { Adapter, VimApi } from "../vim-api.ts";
+import { notify } from "../editor/notify.ts";
 
 // gh shows the hover at the cursor, as Zed's gh does: in Monaco, its own hover, with the error or
 // warning under the cursor and any type information the site provides. Ace and CodeMirror 5 have
@@ -15,14 +16,6 @@ function lineErrors(cm: Adapter, line: number): [string | undefined, string][] {
     .map((m) => [m.find(), m.__annotation] as const)
     .filter(([range, a]) => range && a && range.from.line <= line && line <= range.to.line)
     .map(([, a]) => [a!.severity, a!.message]);
-}
-
-function notify(cm: Adapter, text: string) {
-  if (!cm.openNotification) return;
-  const node = document.createElement("span");
-  node.style.cssText = "font-family: monospace; white-space: pre-wrap";
-  node.textContent = text;
-  cm.openNotification(node, { bottom: true, duration: 8000 });
 }
 
 function hoverAction(cm: Adapter) {

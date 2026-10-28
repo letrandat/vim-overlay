@@ -7,6 +7,7 @@
     "watch": "node scripts/build.mjs --watch",
     "test": "npm run typecheck && npm run build && node test/node.test.cjs && node test/browser.test.cjs",
     "oracle": "node test/make-oracle.cjs",
+    "imports-oracle": "node test/make-imports-oracle.cjs",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
