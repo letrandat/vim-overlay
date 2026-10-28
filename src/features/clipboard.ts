@@ -1,17 +1,12 @@
-import type { PushText, VimApi } from "../vim-api.ts";
+import type { RegisterController, VimApi } from "../vim-api.ts";
+import { afterYank } from "../vim/yank.ts";
 
 // Yanks into the unnamed register also go to the system clipboard. Deletes and
 // named registers do not.
-export const install = (Vim: VimApi) => {
-  // Wrapped on the prototype so a register controller made by a state reset keeps it.
-  const proto = Object.getPrototypeOf(Vim.getRegisterController()) as { pushText: PushText };
-  const pushText = proto.pushText;
-  if (pushText.vimOverlay) return;
-  proto.pushText = function (registerName, operator, ...rest) {
-    pushText.call(this, registerName, operator, ...rest);
-    if (operator === "yank" && (!registerName || registerName === '"'))
-      // Rejected when the page lacks focus or clipboard permission; the register still holds the text.
-      navigator.clipboard?.writeText(this.unnamedRegister.toString()).catch(() => {});
-  };
-  proto.pushText.vimOverlay = true;
+const copy = (controller: RegisterController, registerName: string | undefined) => {
+  if (!registerName || registerName === '"')
+    // Rejected when the page lacks focus or clipboard permission; the register still holds the text.
+    navigator.clipboard?.writeText(controller.unnamedRegister.toString()).catch(() => {});
 };
+
+export const install = (Vim: VimApi) => afterYank(Vim, copy);

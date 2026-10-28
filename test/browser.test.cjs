@@ -19,6 +19,7 @@ const FEATURES = [
   "entire-object",
   "yank-to-eol",
   "clipboard",
+  "yank-flash",
   "complete",
   "move-lines",
   "bracket-objects",

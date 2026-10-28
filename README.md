@@ -22,6 +22,7 @@ A host finds the `Vim` objects live in the page. `src/runtime.ts` asks every hos
 | `entire-object` | `ae` | The whole buffer, linewise, as in [vim-textobj-entire](https://github.com/kana/vim-textobj-entire): `yae`, `dae`, `vae`. |
 | `yank-to-eol` | `Y` | Yanks to the end of the line, as in Neovim. `C` and `D` already act like `c$` and `d$` in every host. Visual-mode `Y` still yanks lines. |
 | `clipboard` | any yank | A yank into the unnamed register also goes to the system clipboard. Deletes and named registers do not. |
+| `yank-flash` | any yank | Briefly highlights the text a yank copied, as Neovim's `vim.hl.on_yank()` does: `yiw`, `yy`, `yap`, Visual and block yanks, into any register. It lasts 150 ms, Neovim's default. Deletes and changes do not flash. Monaco (LeetCode, CodeSignal, CoderPad, HackerRank), CodeMirror 5 and Ace; CodeMirror 6's Vim gives the extension no way to mark text, so nothing flashes there. |
 | `complete` | `Ctrl-N`, `Ctrl-P` in Insert mode | Completes the word before the cursor from words in the buffer, like Vim's `i_CTRL-N`. No popup: each press puts the next match in place, and after the last the typed prefix returns. `Ctrl-N` meets matches below the cursor first, `Ctrl-P` above. `.` repeats the completed text, and `u` undoes it with the rest of the insert, except in Ace, which undoes typing one key at a time. On Windows and Linux, Chrome keeps `Ctrl-N` for a new window. |
 | `move-lines` | `Ctrl-J`, `Ctrl-K` in Normal and Visual mode | Moves the current line, or every line a Visual selection touches, down or up, as the nvim and Zed configs bind them. A count moves that many lines, stopping at the first or last line. Visual mode keeps the selection on the moved lines. One `u` undoes a move. Indentation is left as it is. After an operator (`d<C-j>`) the keys do nothing. |
 | `bracket-objects` | `i(`, `a(`, `i[`, `a[`, `i{`, `a{`, `i<`, `a<` (and the closing-bracket and `b`/`B` forms) | Fixes these in monaco-vim (LeetCode, CodeSignal, CoderPad, HackerRank) only. monaco-vim's bracket search misses the open bracket when a pair sits between it and the cursor (`ci(` on the last `)` of `f(g() / x)`), wraps around the buffer, and gives up after ten brackets. The feature swaps in CodeMirror 5's search, which the other hosts already use. |
@@ -90,7 +91,7 @@ src/vim-api.ts         the Vim API and adapter types used by the extension
 src/hosts/             one module per way of finding a page's Vim object
 src/features/          one module per feature
 src/editor/            shared buffer reads and adapter checks
-src/vim/               shared Visual-mode signalling and the findKey hook
+src/vim/               shared Visual-mode signalling, the findKey hook and the yank hook
 test/                  see Tests
 ```
 

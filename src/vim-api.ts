@@ -51,13 +51,12 @@ export interface Change {
   next?: Change;
 }
 
-interface RegisterController {
+export interface RegisterController {
   unnamedRegister: { toString(): string };
   pushText: PushText;
 }
 export interface PushText {
   (this: RegisterController, registerName: string | undefined, operator: string, ...rest: unknown[]): void;
-  vimOverlay?: boolean;
 }
 
 export interface VimApi {
@@ -86,7 +85,7 @@ export interface MonacoRange {
 }
 export interface Decoration {
   range: MonacoRange;
-  options: { stickiness?: number; linesDecorationsClassName?: string };
+  options: { stickiness?: number; linesDecorationsClassName?: string; className?: string };
 }
 interface Disposable {
   dispose(): void;
@@ -135,7 +134,10 @@ interface AceEditor {
   session: {
     getMode(): { lineCommentStart?: string | string[]; blockComment?: { start: string; end: string } };
     getAnnotations(): { row: number; type: string; text: string }[];
+    addMarker(range: object, className: string, type: "text"): number;
+    removeMarker(id: number): void;
   };
+  getSelectionRange(): { constructor: new (startRow: number, startColumn: number, endRow: number, endColumn: number) => object };
   on(type: "change", callback: (delta: {
     action: string; start: { row: number; column: number }; lines: string[];
   }) => void): void;
@@ -148,9 +150,12 @@ export interface Adapter {
   getOption(name: "tabSize"): number | undefined;
   getCursor(): Pos;
   setCursor(pos: Pos): void;
+  listSelections(): Selection[];
   replaceRange(text: string, from: Pos, to: Pos, origin?: string): void;
   operation?<T>(fn: () => T): T;
   setBookmark(pos: Pos): Bookmark;
+  // Monaco's and Ace's adapters return a mark that does nothing; CodeMirror 6's has none.
+  markText?(from: Pos, to: Pos, options: { className: string }): { clear(): void };
   posFromIndex(index: number): Pos;
   scanForBracket?(pos: Pos, dir: number, style?: unknown, config?: { bracketRegex?: RegExp }): { pos: Pos; ch: string } | null;
   on(type: "vim-mode-change", callback: () => void): void;
