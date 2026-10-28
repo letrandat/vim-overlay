@@ -11,6 +11,8 @@ async function after({ page, check, play }) {
   let got = await play(UNSORTED, [6, 3], "<S-A-o>");
   check("Shift-Alt-O sorts the imports as ruff does", JSON.stringify(got.lines) === JSON.stringify(SORTED), JSON.stringify(got.lines));
   check("the cursor moves with its line", JSON.stringify(got.cursor) === "[7,3]" && got.mode === "normal", JSON.stringify([got.cursor, got.mode]));
+  got = await play(["import os", "x = 1", "import sys", "y = 2"], [1, 0], "<S-A-o>");
+  check("the cursor stays on code between two blocks", JSON.stringify(got.lines) === JSON.stringify(["import os", "", "x = 1", "import sys", "", "y = 2"]) && JSON.stringify(got.cursor) === "[2,0]", JSON.stringify(got));
   got = await play(UNSORTED, [0, 0], "<S-A-o>u");
   check("one u undoes it", JSON.stringify(got.lines) === JSON.stringify(UNSORTED), JSON.stringify(got.lines));
   got = await play(SORTED, [1, 2], "<S-A-o>");

@@ -255,6 +255,41 @@
    "name": "unicode names",
    "input": "from x import é, Ä, b\nimport ü\n",
    "output": "import ü\nfrom x import Ä, b, é\n"
+  },
+  {
+   "name": "same quotes nested in an f-string (Python 3.12)",
+   "input": "s = f\"\"\"{\"\"\"\nimport sys\nimport os\n\"\"\"}\"\"\"\nimport b\nimport a\n",
+   "output": "s = f\"\"\"{\"\"\"\nimport sys\nimport os\n\"\"\"}\"\"\"\nimport a\nimport b\n"
+  },
+  {
+   "name": "f-string fields with strings, braces and a format spec",
+   "input": "x = f\"{d[\"k\"]} {{literal}} {y:{w}}\"\nimport b\nimport a\n",
+   "output": "x = f\"{d[\"k\"]} {{literal}} {y:{w}}\"\nimport a\nimport b\n"
+  },
+  {
+   "name": "hash inside an f-string field",
+   "input": "x = f\"{\"#\"}\"\nimport b\nimport a\n",
+   "output": "x = f\"{\"#\"}\"\nimport a\nimport b\n"
+  },
+  {
+   "name": "t-string with a nested string",
+   "input": "t = t\"\"\"{\"\"\"\nimport z\n\"\"\"}\"\"\"\nimport b\nimport a\n",
+   "output": "t = t\"\"\"{\"\"\"\nimport z\n\"\"\"}\"\"\"\nimport a\nimport b\n"
+  },
+  {
+   "name": "raw and byte strings",
+   "input": "x = rb\"\\\\\"\ny = r\"\\\"\"\nimport b\nimport a\n",
+   "output": "x = rb\"\\\\\"\ny = r\"\\\"\"\nimport a\nimport b\n"
+  },
+  {
+   "name": "empty continuation inside a block",
+   "input": "import sys\n\\\n\nimport os\n",
+   "output": "import os\nimport sys\n"
+  },
+  {
+   "name": "code between two blocks",
+   "input": "import os\nx = 1\nimport sys\ny = 2\n",
+   "output": "import os\n\nx = 1\nimport sys\n\ny = 2\n"
   }
  ]
 }

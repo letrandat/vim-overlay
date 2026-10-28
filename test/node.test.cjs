@@ -214,8 +214,12 @@ function run(box, file) {
   }
   assert.strictEqual(fails.length, 0, `${fails.length} organize-imports cases differ from ${ruff}`);
   const skipped = organizeImports(["import b; import a  # c", "import d"]);
-  assert.strictEqual(JSON.stringify(skipped), JSON.stringify({ lines: ["import b; import a  # c", "import d"], skipped: 1 }), "leaves a block alone when a line holds statements and a comment");
-  console.log(`ok  organize imports matches ${ruff} on ${cases.length} cases; leaves blocks it cannot place comments in`);
+  assert.strictEqual(JSON.stringify([skipped.lines, skipped.skipped]), JSON.stringify([["import b; import a  # c", "import d"], 1]), "leaves a block alone when a line holds statements and a comment");
+  // Each old line maps to the new line it became; a line in a sorted block keeps its offset.
+  const { lineMap } = organizeImports(["import os", "x = 1", "import sys", "y = 2"]);
+  assert.strictEqual(JSON.stringify(lineMap), "[0,2,3,5]", "lines between blocks keep their place as blank lines are added");
+  assert.strictEqual(JSON.stringify(organizeImports(["import b", "import a", "", "", "x = 1"]).lineMap), "[0,1,2,2,3]", "lines in a block keep their offset");
+  console.log(`ok  organize imports matches ${ruff} on ${cases.length} cases; maps old lines to new; leaves blocks it cannot place comments in`);
 }
 
 const Vim = stubVim();

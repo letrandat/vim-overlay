@@ -57,4 +57,11 @@ module.exports = [
   ["leetcode style", "from typing import List, Optional\nfrom collections import defaultdict, Counter, deque\nimport heapq\n\nclass Solution:\n    def f(self, nums: List[int]) -> int:\n        return 0\n"],
   ["dotted from modules", "from os.path import join\nfrom os import path\nfrom collections.abc import Callable\nfrom collections import abc\n"],
   ["unicode names", "from x import é, Ä, b\nimport ü\n"],
+  ["same quotes nested in an f-string (Python 3.12)", 's = f"""{"""\nimport sys\nimport os\n"""}"""\nimport b\nimport a\n'],
+  ["f-string fields with strings, braces and a format spec", 'x = f"{d["k"]} {{literal}} {y:{w}}"\nimport b\nimport a\n'],
+  ["hash inside an f-string field", 'x = f"{"#"}"\nimport b\nimport a\n'],
+  ["t-string with a nested string", 't = t"""{"""\nimport z\n"""}"""\nimport b\nimport a\n'],
+  ["raw and byte strings", 'x = rb"\\\\"\ny = r"\\""\nimport b\nimport a\n'],
+  ["empty continuation inside a block", "import sys\n\\\n\nimport os\n"],
+  ["code between two blocks", "import os\nx = 1\nimport sys\ny = 2\n"],
 ];

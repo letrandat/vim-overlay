@@ -36,7 +36,7 @@ function organizeImportsAction(cm: Adapter) {
   if (monacoOrganize?.isSupported?.()) return void monacoOrganize.run();
   if (!isPython(cm)) return notify(cm, "Organize imports works on Python here");
   const { first, lines } = bufferLines(cm);
-  const { lines: next, skipped } = organizeImports(lines);
+  const { lines: next, lineMap, skipped } = organizeImports(lines);
   let from = 0;
   while (from < lines.length && from < next.length && lines[from] === next[from]) from++;
   let end = 0; // unchanged lines at the end
@@ -46,11 +46,9 @@ function organizeImportsAction(cm: Adapter) {
     const changed = next.slice(from, next.length - end);
     const cursor = cm.getCursor();
     replaceLines(cm, first, lines, from, to, changed);
-    // The cursor keeps its line, moved by the lines added or removed above it.
-    const line = cursor.line - first;
-    const shifted = line < from ? line : line >= to ? line + changed.length - (to - from) : Math.min(line, from + Math.max(changed.length, 1) - 1);
-    const moved = Math.min(shifted, next.length - 1);
-    cm.setCursor({ line: first + moved, ch: Math.min(cursor.ch, next[moved].length) });
+    // The cursor stays on its line wherever the sort moved it.
+    const line = lineMap[cursor.line - first];
+    cm.setCursor({ line: first + line, ch: Math.min(cursor.ch, next[line].length) });
   }
   if (skipped) notify(cm, `Left ${skipped} import block${skipped > 1 ? "s" : ""} as is: a line holds several statements and a comment`);
 }

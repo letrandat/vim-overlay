@@ -14,28 +14,49 @@ const IDENT = new RegExp(`^${NAME}$`, "u");
 // One statement or more, over physical lines start..end, with each line's code and comment.
 interface Logical { start: number; end: number; indent: string; lines: { code: string; comment: string | null }[] }
 
+// A string open at the scan position, or a replacement field inside an f-string or t-string,
+// where code runs again and strings can nest with the same quotes (Python 3.12).
+type Open = { quote: string; fields: boolean } | { braces: number };
+
 // Splits the buffer into logical lines, following brackets, strings and backslash continuations.
 // Lines outside any logical line are blank or hold only a comment.
 function scan(lines: string[]) {
   const logicals: Logical[] = [];
   const comments = new Map<number, string>(); // comment-only lines
-  let quote: string | null = null; // a triple-quoted string open across lines
+  const open: Open[] = [];
   let depth = 0;
   let current: Logical | null = null;
   lines.forEach((text, n) => {
-    let code = text, comment: string | null = null, q = quote;
+    let code = text, comment: string | null = null;
     for (let i = 0; i < text.length; ) {
+      const top = open.at(-1);
       const c = text[i];
-      if (q) {
+      if (top && "quote" in top) {
         if (c === "\\") i += 2;
-        else if (text.startsWith(q, i)) (i += q.length), (q = null);
-        else i++;
-      } else if (c === "#") {
+        else if (text.startsWith(top.quote, i)) (i += top.quote.length), open.pop();
+        else if (top.fields && (c === "{" || c === "}")) {
+          if (text[i + 1] === c) i += 2; // {{ and }} stand for one brace
+          else {
+            if (c === "{") open.push({ braces: 0 });
+            i++;
+          }
+        } else i++;
+      } else if (c === "#" && !top) {
         (code = text.slice(0, i)), (comment = text.slice(i).trimEnd());
         break;
       } else if (c === '"' || c === "'") {
-        q = text.startsWith(c.repeat(3), i) ? c.repeat(3) : c;
-        i += q.length;
+        const quote = text.startsWith(c.repeat(3), i) ? c.repeat(3) : c;
+        const prefix = /(?<![\p{L}\p{N}_])[rRbBfFtTuU]{1,2}$/u.exec(text.slice(0, i))?.[0] ?? "";
+        open.push({ quote, fields: /[fFtT]/.test(prefix) });
+        i += quote.length;
+      } else if (top) {
+        // Inside a replacement field: its closing brace ends it.
+        if (c === "{") top.braces++;
+        else if (c === "}") {
+          if (top.braces) top.braces--;
+          else open.pop();
+        }
+        i++;
       } else {
         if ("([{".includes(c)) depth++;
         else if (")]}".includes(c)) depth = Math.max(0, depth - 1);
@@ -43,17 +64,17 @@ function scan(lines: string[]) {
       }
     }
     const continued = /\\\s*$/.test(code);
-    if (q?.length === 1 && !continued) q = null; // an unclosed one-line string ends with its line
+    // An unclosed one-line string ends with its line, with any field inside it.
+    const oneLine = open.findIndex((o) => "quote" in o && o.quote.length === 1);
+    if (oneLine >= 0 && !continued) open.length = oneLine;
     if (!current && !code.trim()) {
       if (comment) comments.set(n, comment);
-      quote = q;
       return;
     }
-    quote = q;
     current ??= { start: n, end: n, indent: text.match(/^\s*/)![0], lines: [] };
     current.lines.push({ code, comment });
     current.end = n;
-    if (!quote && !depth && !continued) logicals.push(current), (current = null);
+    if (!open.length && !depth && !continued) logicals.push(current), (current = null);
   });
   if (current) logicals.push(current);
   return { logicals, comments };
@@ -326,13 +347,18 @@ function linesAfter(lines: string[], next: Logical) {
   return 2;
 }
 
-// The buffer with every import block sorted, and how many blocks were left as they are because
-// a line in them holds more than one statement and a comment.
+// The buffer with every import block sorted; for each old line, the new line it became, or for a
+// line in a sorted block, the line at the same offset in the new block; and how many blocks were
+// left as they are because a line in them holds more than one statement and a comment.
 export function organizeImports(lines: string[]) {
   const { logicals, comments } = scan(lines);
   const unit = logicals.find((l) => l.indent)?.indent ?? "    ";
   const out: string[] = [];
+  const lineMap: number[] = [];
   let copied = 0; // lines before this index are in out
+  const copy = (to: number) => {
+    for (; copied < to; copied++) lineMap.push(out.push(lines[copied]) - 1);
+  };
   let skipped = 0;
   let block: { logicals: Logical[]; statements: Statement[]; ok: boolean } | null = null;
 
@@ -342,15 +368,16 @@ export function organizeImports(lines: string[]) {
     let end = last.end + 1;
     const after = next && !first.indent ? linesAfter(lines, next) : 0;
     if (after) while (blank(lines[end])) end++;
-    out.push(...lines.slice(copied, first.start));
+    copy(first.start);
     if (block.ok) {
+      const start = out.length;
       out.push(...format(block.statements, first.indent, unit).map((s) => (s ? first.indent + s : s)));
       for (let i = 0; i < after; i++) out.push("");
+      for (; copied < end; copied++) lineMap.push(Math.min(start + copied - first.start, out.length - 1));
     } else {
       skipped++;
-      out.push(...lines.slice(first.start, end));
+      copy(end);
     }
-    copied = end;
     block = null;
   };
 
@@ -360,6 +387,7 @@ export function organizeImports(lines: string[]) {
       finish(logical);
       continue;
     }
+    if (!statements.length) continue; // a backslash before a blank line: nothing, as in Python
     if (block && block.logicals[0].indent !== logical.indent) finish(logical);
     block ??= { logicals: [], statements: [], ok: true };
     // Comment lines since the previous statement go above this one; before the first, they stay.
@@ -373,6 +401,6 @@ export function organizeImports(lines: string[]) {
     block.statements.push(...statements);
   }
   finish(undefined);
-  out.push(...lines.slice(copied));
-  return { lines: out, skipped };
+  copy(lines.length);
+  return { lines: out, lineMap, skipped };
 }
