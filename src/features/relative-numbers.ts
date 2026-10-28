@@ -3,9 +3,9 @@ import { beforeKey } from "../vim/keys.ts";
 
 // A column of relative line numbers between Monaco's own numbers and the code, so a count for
 // j or k reads off the screen while anyone watching a shared screen still sees the usual
-// numbers. Monaco only (LeetCode, CodeSignal, CoderPad). monaco-vim hands the editor to vim.js
-// only with a key, so the column appears at the editor's first key. `:set nornu` hides it and
-// `:set rnu` brings it back, for every editor of that Vim, until the page reloads.
+// numbers. Monaco only (LeetCode, CodeSignal, CoderPad). Off until `:set rnu`, which shows it in
+// every editor of that Vim until `:set nornu` or a page reload. monaco-vim hands the editor to
+// vim.js only with a key, so `:set rnu` exists from the editor's first key.
 const CLASS = "vim-overlay-rel";
 const MAX = 999;
 const shown = new WeakSet<MonacoEditor>(); // Monaco editors
@@ -81,7 +81,7 @@ function show(editor: MonacoEditor, isOn: () => boolean, renders: Set<() => void
 }
 
 export const install = (Vim: VimApi) => {
-  let on = true;
+  let on = false;
   const renders = new Set<() => void>(); // one per editor this Vim drew the column in
   let defined = false;
   beforeKey(Vim, (cm) => {
