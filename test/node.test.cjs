@@ -71,7 +71,7 @@ function run(box, file) {
   tick();
   tick();
   assert.deepStrictEqual(installs, [a], "one install per Vim object across duplicates and polls");
-  assert.deepStrictEqual(a.commands.map((c) => c.keys), ["ii", "ai", "iI", "aI", "ae", "<C-n>", "<C-p>", "<C-j>", "<C-k>", "<C-j>", "<C-k>", "iq", "aq", "gc", "g;", "g,", "`.", "'.", "grn", "gh", "<C-a>", "<C-x>"], "a throwing feature does not stop the others");
+  assert.deepStrictEqual(a.commands.map((c) => c.keys), ["ii", "ai", "iI", "aI", "ae", "<C-n>", "<C-p>", "<C-j>", "<C-k>", "<C-j>", "<C-k>", "iq", "aq", "gc", "g;", "g,", "`.", "'.", "grn", "gh", "<C-a>", "<C-x>", "<S-A-o>"], "a throwing feature does not stop the others");
   assert.deepStrictEqual(a.maps, [["Y", "y$", "normal"]], "Y maps to y$ in Normal mode");
   assert.ok(warnings.some((w) => w.includes("broken-feature")), "warning names the feature");
   assert.ok(warnings.some((w) => w.includes("broken-host")), "warning names the host");
@@ -82,11 +82,11 @@ function run(box, file) {
   start(run(box, "src/runtime.ts"));
   tick();
   assert.strictEqual(page.timers.length, 1, "a second copy of the script does not poll again");
-  assert.deepStrictEqual([a.commands.length, a.maps.length, installs.length], [22, 1, 2], "a second copy of the script does not install again");
+  assert.deepStrictEqual([a.commands.length, a.maps.length, installs.length], [23, 1, 2], "a second copy of the script does not install again");
   const c = stubVim();
   vims.push(c);
   tick();
-  assert.deepStrictEqual([c.defines, c.commands.length], [5, 22], "a Vim object found after a second copy installs once");
+  assert.deepStrictEqual([c.defines, c.commands.length], [5, 23], "a Vim object found after a second copy installs once");
   console.log("ok  runtime: once per Vim object, failures isolated and named, second copy is a no-op");
 }
 
@@ -200,6 +200,26 @@ function run(box, file) {
   );
   assert.ok(found.length === 3 && found[2] === sandbox.initVim, "finds Vim on the class of the adapter, even when dispose throws");
   console.log("ok  webpack host: finds Vim in modules the page ran; runs no module, re-export or global getter; falls back to initVimMode");
+}
+
+{
+  // The Python sorter against ruff's fix of each case, as make-imports-oracle.cjs recorded it.
+  const { ruff, cases } = require("./imports-oracle.json");
+  const { organizeImports } = run(newSandbox().box, "src/python/imports.ts");
+  // ruff ends a file that has no final newline with one; an editor buffer has none to add.
+  const want = (c) => (c.input.endsWith("\n") || !c.output.endsWith("\n") ? c.output : c.output.slice(0, -1));
+  const fails = cases.filter((c) => organizeImports(c.input.split("\n")).lines.join("\n") !== want(c));
+  for (const c of fails.slice(0, 3)) {
+    console.log(`FAIL organize imports, ${c.name}:\n--- want\n${want(c)}--- got\n${organizeImports(c.input.split("\n")).lines.join("\n")}`);
+  }
+  assert.strictEqual(fails.length, 0, `${fails.length} organize-imports cases differ from ${ruff}`);
+  assert.strictEqual(organizeImports(["import b", "import a", "x = (1,"]).untouched, "a string or bracket is not closed", "leaves a buffer with an unclosed bracket alone");
+  assert.strictEqual(organizeImports(["s = 'x\\ ", "'", "import b", "import a"]).untouched, "a string or bracket is not closed", "a backslash before a space does not continue a string");
+  // Each old line maps to the new line it became; a line in a sorted block keeps its offset.
+  const { lineMap } = organizeImports(["import os", "x = 1", "import sys", "y = 2"]);
+  assert.strictEqual(JSON.stringify(lineMap), "[0,2,3,5]", "lines between blocks keep their place as blank lines are added");
+  assert.strictEqual(JSON.stringify(organizeImports(["import b", "import a", "", "", "x = 1"]).lineMap), "[0,1,2,2,3]", "lines in a block keep their offset");
+  console.log(`ok  organize imports matches ${ruff} on ${cases.length} cases; maps old lines to new; leaves unclosed code alone`);
 }
 
 const Vim = stubVim();

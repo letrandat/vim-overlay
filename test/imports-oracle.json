@@ -1,0 +1,655 @@
+{
+ "ruff": "ruff 0.16.6",
+ "cases": [
+  {
+   "name": "the README example",
+   "input": "from dataclasses import dataclass\nimport random\nimport time\nfrom typing import Protocol\nfrom collections.abc import Callable\n\nclass A: pass\n",
+   "output": "import random\nimport time\nfrom collections.abc import Callable\nfrom dataclasses import dataclass\nfrom typing import Protocol\n\n\nclass A: pass\n"
+  },
+  {
+   "name": "sections, merges, aliases and relative imports",
+   "input": "import os, sys\nimport numpy as np\nfrom . import b\nfrom .. import a\nfrom .x import y\nfrom __future__ import annotations\nimport requests\nfrom typing import List, Dict, TYPE_CHECKING, cast, Any\nfrom typing import Optional as Opt\nfrom typing import Optional\nimport os.path\nimport collections as c\nimport collections\nx = 1\n",
+   "output": "from __future__ import annotations\n\nimport collections\nimport collections as c\nimport os\nimport os.path\nimport sys\nfrom typing import TYPE_CHECKING, Any, Dict, List, Optional, cast\nfrom typing import Optional as Opt\n\nimport numpy as np\nimport requests\n\nfrom .. import a\nfrom . import b\nfrom .x import y\n\nx = 1\n"
+  },
+  {
+   "name": "already sorted",
+   "input": "import os\nimport sys\n\nimport requests\n\nprint(os, sys, requests)\n",
+   "output": "import os\nimport sys\n\nimport requests\n\nprint(os, sys, requests)\n"
+  },
+  {
+   "name": "no imports",
+   "input": "x = 1\nprint(x)\n",
+   "output": "x = 1\nprint(x)\n"
+  },
+  {
+   "name": "empty",
+   "input": "",
+   "output": ""
+  },
+  {
+   "name": "imports only, no newline at the end",
+   "input": "import b\nimport a",
+   "output": "import a\nimport b\n"
+  },
+  {
+   "name": "trailing blank lines at the end stay",
+   "input": "import b\nimport a\n\n\n\n\n",
+   "output": "import a\nimport b\n\n\n\n\n"
+  },
+  {
+   "name": "case-insensitive, natural order",
+   "input": "import heapq\nimport Foo\nimport bar\nimport a10\nimport a9\nimport A1\nimport a_b\nimport aB\nimport a.b\nimport a\n",
+   "output": "import heapq\n\nimport a\nimport a.b\nimport A1\nimport a9\nimport a10\nimport a_b\nimport aB\nimport bar\nimport Foo\n"
+  },
+  {
+   "name": "members by type",
+   "input": "from x import B, a, A, b, AB, Ab, _c, __d, CONST_1, Klass2\n",
+   "output": "from x import AB, CONST_1, A, Ab, B, Klass2, __d, _c, a, b\n"
+  },
+  {
+   "name": "alias statements sort by their first member",
+   "input": "from m import Z as z, y\nfrom typing import Optional as Opt, TYPE_CHECKING\n",
+   "output": "from typing import TYPE_CHECKING\nfrom typing import Optional as Opt\n\nfrom m import Z as z\nfrom m import y\n"
+  },
+  {
+   "name": "duplicates",
+   "input": "import os\nimport os\nfrom x import a\nfrom x import a, b\nfrom x import a as b\nfrom x import a as b\n",
+   "output": "import os\n\nfrom x import a, b\nfrom x import a as b\n"
+  },
+  {
+   "name": "star imports",
+   "input": "from x import a\nfrom x import *\nfrom os.path import *\nimport os\n",
+   "output": "import os\nfrom os.path import *\n\nfrom x import *\nfrom x import a\n"
+  },
+  {
+   "name": "relative imports furthest first",
+   "input": "from .c import z\nfrom . import y\nfrom ...a import w\nfrom .. import x\nfrom ..b import v\nfrom .c.d import u\n",
+   "output": "from ...a import w\nfrom .. import x\nfrom ..b import v\nfrom . import y\nfrom .c import z\nfrom .c.d import u\n"
+  },
+  {
+   "name": "future first, from before straight",
+   "input": "import __future__\nfrom __future__ import division\nfrom __future__ import annotations\nimport os\n",
+   "output": "from __future__ import annotations, division\nimport __future__\n\nimport os\n"
+  },
+  {
+   "name": "header comment above the block stays",
+   "input": "#!/usr/bin/env python3\n# header comment\nimport sys  # trailing\n# above os\nimport os\n\nimport abc\nprint(1)\n",
+   "output": "#!/usr/bin/env python3\n# header comment\nimport abc\n\n# above os\nimport os\nimport sys  # trailing\n\nprint(1)\n"
+  },
+  {
+   "name": "docstring before the block",
+   "input": "\"\"\"Doc.\n\nimport fake\n\"\"\"\nimport sys\nimport os\n\n\nx = 1\n",
+   "output": "\"\"\"Doc.\n\nimport fake\n\"\"\"\nimport os\nimport sys\n\nx = 1\n"
+  },
+  {
+   "name": "comment then def gets two lines",
+   "input": "import sys\nimport os\n# comment\ndef f(): pass\n",
+   "output": "import os\nimport sys\n\n\n# comment\ndef f(): pass\n"
+  },
+  {
+   "name": "detached comment before def gets one line",
+   "input": "import sys\nimport os\n\n# detached\n\ndef f(): pass\n",
+   "output": "import os\nimport sys\n\n# detached\n\ndef f(): pass\n"
+  },
+  {
+   "name": "detached and direct comments before def",
+   "input": "import sys\nimport os\n\n# detached\n\n# direct\ndef f(): pass\n",
+   "output": "import os\nimport sys\n\n# detached\n\n# direct\ndef f(): pass\n"
+  },
+  {
+   "name": "decorator counts as def",
+   "input": "import sys\nimport os\n@dec\ndef f(): pass\n",
+   "output": "import os\nimport sys\n\n\n@dec\ndef f(): pass\n"
+  },
+  {
+   "name": "decorated class",
+   "input": "import sys\nimport os\n\n\n\n\n@dataclass\nclass A:\n    x: int\n",
+   "output": "import os\nimport sys\n\n\n@dataclass\nclass A:\n    x: int\n"
+  },
+  {
+   "name": "async def",
+   "input": "import sys\nimport os\nasync def f(): pass\n",
+   "output": "import os\nimport sys\n\n\nasync def f(): pass\n"
+  },
+  {
+   "name": "if after the block gets one line",
+   "input": "import sys\nimport os\nif True:\n    pass\n",
+   "output": "import os\nimport sys\n\nif True:\n    pass\n"
+  },
+  {
+   "name": "extra blank lines before code shrink to one",
+   "input": "import b\n\n\n\nimport a\n\n\n\n\nx = 1\n",
+   "output": "import a\nimport b\n\nx = 1\n"
+  },
+  {
+   "name": "comment after the block",
+   "input": "import b\nimport a\n# trailing\nx = 1\n",
+   "output": "import a\nimport b\n\n# trailing\nx = 1\n"
+  },
+  {
+   "name": "lonely comment inside the block",
+   "input": "import b\n\n\n# lonely comment\n\nimport a\n",
+   "output": "# lonely comment\nimport a\nimport b\n"
+  },
+  {
+   "name": "comments move with their imports",
+   "input": "import b  # cb\n# above a\nimport a\n# above c\nimport c\n",
+   "output": "# above a\nimport a\nimport b  # cb\n\n# above c\nimport c\n"
+  },
+  {
+   "name": "nested blocks keep their surroundings",
+   "input": "import b\nimport a\ndef f():\n    import z\n    import y\n    return 1\nimport d\nimport c\n",
+   "output": "import a\nimport b\n\n\ndef f():\n    import y\n    import z\n    return 1\nimport c\nimport d\n"
+  },
+  {
+   "name": "nested block keeps its blank line",
+   "input": "def f():\n    import b\n    import a\n\n    return 1\n",
+   "output": "def f():\n    import a\n    import b\n\n    return 1\n"
+  },
+  {
+   "name": "try and except bodies",
+   "input": "try:\n    import ujson as json\nexcept ImportError:\n    import json\nimport b\nimport a\n",
+   "output": "try:\n    import ujson as json\nexcept ImportError:\n    import json\nimport a\nimport b\n"
+  },
+  {
+   "name": "type checking block",
+   "input": "from __future__ import annotations\nfrom typing import TYPE_CHECKING\nimport os\n\nif TYPE_CHECKING:\n    from collections.abc import Sequence, Callable\n    import numpy\n\nx = 1\n",
+   "output": "from __future__ import annotations\n\nimport os\nfrom typing import TYPE_CHECKING\n\nif TYPE_CHECKING:\n    from collections.abc import Callable, Sequence\n\n    import numpy\n\nx = 1\n"
+  },
+  {
+   "name": "semicolons split",
+   "input": "from x import a; import b\nimport a\n",
+   "output": "import a\nimport b\nfrom x import a\n"
+  },
+  {
+   "name": "parentheses collapse when they fit",
+   "input": "from x import (a, b)\nfrom y import (\n    c\n)\n",
+   "output": "from x import a, b\nfrom y import c\n"
+  },
+  {
+   "name": "trailing comma keeps parentheses",
+   "input": "from z import (d,)\nfrom collections import (\n    deque,\n    defaultdict,\n)\n",
+   "output": "from collections import (\n    defaultdict,\n    deque,\n)\n\nfrom z import (\n    d,\n)\n"
+  },
+  {
+   "name": "long lines wrap",
+   "input": "from x import b, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nfrom y import b, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nfrom aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaaaaaaaaaaaaaaaaaaaaaaaa import aaaaaaaaaaaaaaaaaa, c, aaaaaaaaaaaaaaaaaa\n",
+   "output": "from aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaaaaaaaaaaaaaaaaaaaaaaaa import (\n    aaaaaaaaaaaaaaaaaa,\n    c,\n)\nfrom x import aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, b\nfrom y import (\n    aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,\n    b,\n)\n"
+  },
+  {
+   "name": "long alias",
+   "input": "from y import aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa as aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nimport aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaaaaaaaaaaaaaaaaaaaaaaaaa as f\n",
+   "output": "import aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaaaaaaaaaaaaaaaaaaaaaaaaa as f\nfrom y import (\n    aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa as aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,\n)\n"
+  },
+  {
+   "name": "long nested import wraps at the indent",
+   "input": "def f():\n    from x import b, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n    from x import c, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n",
+   "output": "def f():\n    from x import (\n        aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,\n        aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,\n        b,\n        c,\n    )\n"
+  },
+  {
+   "name": "two-space indent file",
+   "input": "def f():\n  from x import b, c, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n  return 1\n",
+   "output": "def f():\n  from x import (\n    aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,\n    b,\n    c,\n  )\n  return 1\n"
+  },
+  {
+   "name": "statement comment",
+   "input": "import b, a  # c\nfrom x import b, a  # c\nfrom x import d\n",
+   "output": "import a\nimport b  # c\nfrom x import a, b, d  # c\n"
+  },
+  {
+   "name": "single-member comments",
+   "input": "from x import b  # cb\nfrom y import a\nfrom x import a  # ca\nimport z  # cz\nimport z\n",
+   "output": "import z  # cz\nfrom x import (\n    a,  # ca\n    b,  # cb\n)\nfrom y import a\n"
+  },
+  {
+   "name": "comment after closing parenthesis",
+   "input": "from x import (\n    b,\n    a\n)  # c\nfrom y import (\n    b,\n    a,\n)  # c\n",
+   "output": "from x import a, b  # c\nfrom y import (\n    a,\n    b,\n)  # c\n"
+  },
+  {
+   "name": "comments inside parentheses",
+   "input": "from typing import (  # c1\n    List,  # c2\n    Any,\n)\nfrom x import (\n    # lead\n    b,\n    a,\n    # tail\n)\nimport a\n",
+   "output": "from typing import (  # c1\n    Any,\n    List,  # c2\n)\n\nimport a\nfrom x import (\n    a,\n    # tail\n    # lead\n    b,\n)\n"
+  },
+  {
+   "name": "duplicate comments join",
+   "input": "import os  # c\nimport os  # d\nfrom x import a  # c\nfrom x import a  # d\n",
+   "output": "import os  # c  # d\n\nfrom x import a  # c  # d\n"
+  },
+  {
+   "name": "comment widens the line",
+   "input": "from x import b, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  # 1234567\nfrom y import b, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  # 12345678\n",
+   "output": "from x import aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, b  # 1234567\nfrom y import (  # 12345678\n    aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,\n    b,\n)\n"
+  },
+  {
+   "name": "strings with hashes and import words",
+   "input": "import b\nimport a\nx = \"import c  # not a comment\"\ny = 'from d import e'\n",
+   "output": "import a\nimport b\n\nx = \"import c  # not a comment\"\ny = 'from d import e'\n"
+  },
+  {
+   "name": "backslash continuation",
+   "input": "from x import b, \\\n    a\nimport c\n",
+   "output": "import c\nfrom x import a, b\n"
+  },
+  {
+   "name": "mid-file block",
+   "input": "x = 1\nimport b\nimport a\nprint(x)\n",
+   "output": "x = 1\nimport a\nimport b\n\nprint(x)\n"
+  },
+  {
+   "name": "third-party and stdlib mixed",
+   "input": "import requests\nimport json\nfrom flask import Flask, request\nfrom pathlib import Path\nimport numpy as np\nimport pandas as pd\nfrom itertools import chain, accumulate, permutations\nfrom functools import lru_cache, cache\nfrom heapq import heappush, heappop, heapify\nfrom bisect import bisect_left\nimport math\n\n\ndef solve():\n    pass\n",
+   "output": "import json\nimport math\nfrom bisect import bisect_left\nfrom functools import cache, lru_cache\nfrom heapq import heapify, heappop, heappush\nfrom itertools import accumulate, chain, permutations\nfrom pathlib import Path\n\nimport numpy as np\nimport pandas as pd\nimport requests\nfrom flask import Flask, request\n\n\ndef solve():\n    pass\n"
+  },
+  {
+   "name": "leetcode style",
+   "input": "from typing import List, Optional\nfrom collections import defaultdict, Counter, deque\nimport heapq\n\nclass Solution:\n    def f(self, nums: List[int]) -> int:\n        return 0\n",
+   "output": "import heapq\nfrom collections import Counter, defaultdict, deque\nfrom typing import List, Optional\n\n\nclass Solution:\n    def f(self, nums: List[int]) -> int:\n        return 0\n"
+  },
+  {
+   "name": "dotted from modules",
+   "input": "from os.path import join\nfrom os import path\nfrom collections.abc import Callable\nfrom collections import abc\n",
+   "output": "from collections import abc\nfrom collections.abc import Callable\nfrom os import path\nfrom os.path import join\n"
+  },
+  {
+   "name": "unicode names",
+   "input": "from x import é, Ä, b\nimport ü\n",
+   "output": "import ü\nfrom x import Ä, b, é\n"
+  },
+  {
+   "name": "same quotes nested in an f-string (Python 3.12)",
+   "input": "s = f\"\"\"{\"\"\"\nimport sys\nimport os\n\"\"\"}\"\"\"\nimport b\nimport a\n",
+   "output": "s = f\"\"\"{\"\"\"\nimport sys\nimport os\n\"\"\"}\"\"\"\nimport a\nimport b\n"
+  },
+  {
+   "name": "f-string fields with strings, braces and a format spec",
+   "input": "x = f\"{d[\"k\"]} {{literal}} {y:{w}}\"\nimport b\nimport a\n",
+   "output": "x = f\"{d[\"k\"]} {{literal}} {y:{w}}\"\nimport a\nimport b\n"
+  },
+  {
+   "name": "hash inside an f-string field",
+   "input": "x = f\"{\"#\"}\"\nimport b\nimport a\n",
+   "output": "x = f\"{\"#\"}\"\nimport a\nimport b\n"
+  },
+  {
+   "name": "t-string with a nested string",
+   "input": "t = t\"\"\"{\"\"\"\nimport z\n\"\"\"}\"\"\"\nimport b\nimport a\n",
+   "output": "t = t\"\"\"{\"\"\"\nimport z\n\"\"\"}\"\"\"\nimport a\nimport b\n"
+  },
+  {
+   "name": "raw and byte strings",
+   "input": "x = rb\"\\\\\"\ny = r\"\\\"\"\nimport b\nimport a\n",
+   "output": "x = rb\"\\\\\"\ny = r\"\\\"\"\nimport a\nimport b\n"
+  },
+  {
+   "name": "empty continuation inside a block",
+   "input": "import sys\n\\\n\nimport os\n",
+   "output": "import os\nimport sys\n"
+  },
+  {
+   "name": "code between two blocks",
+   "input": "import os\nx = 1\nimport sys\ny = 2\n",
+   "output": "import os\n\nx = 1\nimport sys\n\ny = 2\n"
+  },
+  {
+   "name": "a field runs past the end of a one-line f-string's line",
+   "input": "s = f\"{\"\"\"\nimport sys\nimport os\n\"\"\"}\"\nimport b\nimport a\n",
+   "output": "s = f\"{\"\"\"\nimport sys\nimport os\n\"\"\"}\"\nimport a\nimport b\n"
+  },
+  {
+   "name": "the same in a t-string",
+   "input": "s = t\"{\"\"\"\nimport sys\nimport os\n\"\"\"}\"\nimport b\nimport a\n",
+   "output": "s = t\"{\"\"\"\nimport sys\nimport os\n\"\"\"}\"\nimport a\nimport b\n"
+  },
+  {
+   "name": "a comment inside a field",
+   "input": "s = f\"\"\"{1 # }\"\"\"\n}\nimport sys\nimport os\n\"\"\"\nimport b\nimport a\n",
+   "output": "s = f\"\"\"{1 # }\"\"\"\n}\nimport sys\nimport os\n\"\"\"\nimport a\nimport b\n"
+  },
+  {
+   "name": "a backslash before a field's brace",
+   "input": "s = rf\"\"\"\\{\"\"\"\nimport sys\nimport os\n\"\"\"}\"\"\"\nt = f\"\"\"\\{\"\"\"\nimport z\nimport y\n\"\"\"}\"\"\"\nimport b\nimport a\n",
+   "output": "s = rf\"\"\"\\{\"\"\"\nimport sys\nimport os\n\"\"\"}\"\"\"\nt = f\"\"\"\\{\"\"\"\nimport z\nimport y\n\"\"\"}\"\"\"\nimport a\nimport b\n"
+  },
+  {
+   "name": "a named character escape is not a field",
+   "input": "s = f\"\\N{BULLET} {x}\"\nimport b\nimport a\n",
+   "output": "s = f\"\\N{BULLET} {x}\"\nimport a\nimport b\n"
+  },
+  {
+   "name": "an unclosed one-line string ends with its line",
+   "input": "s = 'abc\nimport b\nimport a\n",
+   "output": "s = 'abc\nimport b\nimport a\n"
+  },
+  {
+   "name": "format specs are text",
+   "input": "x = f\"{id(y):#x} {y:{w}.{p}f} {d[\"k\"]!r:>{n}} {y:'#'}\"\nimport b\nimport a\n",
+   "output": "x = f\"{id(y):#x} {y:{w}.{p}f} {d[\"k\"]!r:>{n}} {y:'#'}\"\nimport a\nimport b\n"
+  },
+  {
+   "name": "colons inside a field's brackets are code",
+   "input": "x = f\"{d[1:2]} {(lambda: 1)()} {(y := 2)} {\"#\"}\"  # c\nimport b\nimport a\n",
+   "output": "x = f\"{d[1:2]} {(lambda: 1)()} {(y := 2)} {\"#\"}\"  # c\nimport a\nimport b\n"
+  },
+  {
+   "name": "a file-level flake8 noqa turns sorting off",
+   "input": "# flake8: noqa\nimport b\nimport a\n",
+   "output": "# flake8: noqa\nimport b\nimport a\n"
+  },
+  {
+   "name": "a file-level ruff noqa naming I001",
+   "input": "# ruff: noqa: E501, I001\nimport b\nimport a\n",
+   "output": "# ruff: noqa: E501, I001\nimport b\nimport a\n"
+  },
+  {
+   "name": "a noqa naming other rules does not",
+   "input": "# ruff: noqa: E501\nimport b\nimport a\n",
+   "output": "# ruff: noqa: E501\nimport a\nimport b\n"
+  },
+  {
+   "name": "isort skip_file",
+   "input": "import b\nimport a\n# isort: skip_file\n",
+   "output": "import b\nimport a\n# isort: skip_file\n"
+  },
+  {
+   "name": "__main__ is first-party",
+   "input": "import __main__\nfrom . import x\nimport requests\nimport os\nimport __main__.sub\n",
+   "output": "import os\n\nimport __main__.sub\nimport requests\n\nimport __main__\n\nfrom . import x\n"
+  },
+  {
+   "name": "the standard library as of Python 3.14",
+   "input": "import tomllib\nimport annotationlib\nimport parser\nimport distutils\nimport _testcapi\nimport zoneinfo\n",
+   "output": "import _testcapi\nimport annotationlib\nimport tomllib\nimport zoneinfo\n\nimport distutils\nimport parser\n"
+  },
+  {
+   "name": "comments on a line of several statements",
+   "input": "from __future__ import nested_scopes; import site  # noqa: F401\nimport b; import a  # c\nfrom x import d; from y import (f,  # cf\n    e)  # ce\nimport z; from w import v, u  # cw\n",
+   "output": "from __future__ import nested_scopes  # noqa: F401\n\nimport site\n\nimport a\nimport b  # c\nimport z  # cw\nfrom w import u, v\nfrom x import d  # cf\nfrom y import (\n    e,  # ce\n    f,\n)\n"
+  },
+  {
+   "name": "a comment after a backslash goes above the next import",
+   "input": "import b \\\n# keep this comment\nimport a\nfrom x import a \\\n# c\nimport b\n",
+   "output": "# keep this comment\nimport a\n\n# c\nimport b\nfrom x import a\n"
+  },
+  {
+   "name": "a block ending in a backslash is left as is",
+   "input": "import b\nimport a \\\n# c\nx = 1\nimport d\nimport c \\\n# c\n",
+   "output": "import b\nimport a \\\n# c\nx = 1\nimport d\nimport c \\\n# c\n"
+  },
+  {
+   "name": "backslash lines holding nothing but a comment",
+   "input": "import b \\\n\\\n# c\nimport a\nimport d\n\\\n# e\nimport c\n",
+   "output": "# c\nimport a\nimport b\n\n# e\nimport c\nimport d\n"
+  },
+  {
+   "name": "blocks sharing a line with other code are left as is",
+   "input": "x = 1; import c\nimport b\nimport a\ny = 2\nimport e\nimport d; z = 3\nimport g; w = 4\nimport f\nimport e\n",
+   "output": "x = 1; import c\nimport b\nimport a\ny = 2\nimport e\nimport d; z = 3\nimport g; w = 4\nimport e\nimport f\n"
+  },
+  {
+   "name": "a trailing semicolon",
+   "input": "import a;\nimport c\nimport b\n",
+   "output": "import a\nimport b\nimport c\n"
+  },
+  {
+   "name": "isort skip_file after code",
+   "input": "import b  # isort: skip_file\nimport a\n",
+   "output": "import b  # isort: skip_file\nimport a\n"
+  },
+  {
+   "name": "isort skip_file without the space",
+   "input": "import b\nimport a  # isort:skip_file\n",
+   "output": "import b\nimport a  # isort:skip_file\n"
+  },
+  {
+   "name": "ruff skip_file",
+   "input": "# ruff: isort: skip_file\nimport b\nimport a\n",
+   "output": "# ruff: isort: skip_file\nimport b\nimport a\n"
+  },
+  {
+   "name": "a blanket noqa with a note",
+   "input": "# ruff: noqa  # generated file\nimport b\nimport a\n",
+   "output": "# ruff: noqa  # generated file\nimport b\nimport a\n"
+  },
+  {
+   "name": "a flake8 noqa naming I001",
+   "input": "# flake8: noqa: I001\nimport b\nimport a\n",
+   "output": "# flake8: noqa: I001\nimport b\nimport a\n"
+  },
+  {
+   "name": "a flake8 noqa naming other codes",
+   "input": "# flake8: noqa: E501\nimport b\nimport a\n",
+   "output": "# flake8: noqa: E501\nimport a\nimport b\n"
+  },
+  {
+   "name": "noqa in capitals",
+   "input": "# ruff: NOQA\nimport b\nimport a\n",
+   "output": "# ruff: NOQA\nimport b\nimport a\n"
+  },
+  {
+   "name": "noqa codes without spaces",
+   "input": "#ruff:noqa:E501,I001\nimport b\nimport a\n",
+   "output": "#ruff:noqa:E501,I001\nimport b\nimport a\n"
+  },
+  {
+   "name": "noqa codes split by spaces",
+   "input": "# ruff: noqa: E501 I001\nimport b\nimport a\n",
+   "output": "# ruff: noqa: E501 I001\nimport b\nimport a\n"
+  },
+  {
+   "name": "noqa after code is not file-level",
+   "input": "import b  # ruff: noqa\nimport a\n",
+   "output": "import a\nimport b  # ruff: noqa\n"
+  },
+  {
+   "name": "a misspelled noqa",
+   "input": "# ruff: noqaX\nimport b\nimport a\n",
+   "output": "# ruff: noqaX\nimport a\nimport b\n"
+  },
+  {
+   "name": "an indented noqa on its own line",
+   "input": "def f():\n    # ruff: noqa\n    import b\n    import a\n",
+   "output": "def f():\n    # ruff: noqa\n    import b\n    import a\n"
+  },
+  {
+   "name": "noqa after another comment",
+   "input": "# note # ruff: noqa\nimport b\nimport a\n",
+   "output": "# note # ruff: noqa\nimport b\nimport a\n"
+  },
+  {
+   "name": "a byte order mark",
+   "input": "﻿import sys, os\n",
+   "output": "﻿import os\nimport sys\n"
+  },
+  {
+   "name": "a byte order mark before a noqa",
+   "input": "﻿# ruff: noqa\nimport b\nimport a\n",
+   "output": "﻿# ruff: noqa\nimport b\nimport a\n"
+  },
+  {
+   "name": "a form feed before def",
+   "input": "import sys\nimport os\n\fdef f(): pass\n",
+   "output": "import os\nimport sys\n\n\n\fdef f(): pass\n"
+  },
+  {
+   "name": "spaces around dots",
+   "input": "import z . b\nimport a\nfrom z . b import c\nfrom a import d\nimport a .b, z. c\n",
+   "output": "import a\nimport a .b\nimport z . b\nimport z. c\nfrom a import d\nfrom z . b import c\n"
+  },
+  {
+   "name": "spaces between relative dots",
+   "input": "from . . x import y\nfrom a import d\n",
+   "output": "from a import d\n\nfrom ..x import y\n"
+  },
+  {
+   "name": "a spaced standard library module",
+   "input": "import os . path\nimport sys\n",
+   "output": "import sys\n\nimport os . path\n"
+  },
+  {
+   "name": "a dotted name imported from a module is not valid",
+   "input": "from x import a.b\nimport c\n",
+   "output": "from x import a.b\nimport c\n"
+  },
+  {
+   "name": "a noqa on the block's first import",
+   "input": "import b  # noqa: I001\nimport a\nimport d  # noqa\nimport c\n",
+   "output": "import b  # noqa: I001\nimport a\nimport d  # noqa\nimport c\n"
+  },
+  {
+   "name": "a noqa on a later import does not count",
+   "input": "import c\nimport b  # noqa\nimport a\n",
+   "output": "import a\nimport b  # noqa\nimport c\n"
+  },
+  {
+   "name": "noqa forms on an import line",
+   "input": "import b  #NOQA:I001\nimport a\nx = 1\nimport d  # noqa: E501\nimport c\ny = 2\nimport f  # see noqa\nimport e\nz = 3\nimport h  # x # noqa\nimport g\n",
+   "output": "import b  #NOQA:I001\nimport a\nx = 1\nimport c\nimport d  # noqa: E501\n\ny = 2\nimport e\nimport f  # see noqa\n\nz = 3\nimport h  # x # noqa\nimport g\n"
+  },
+  {
+   "name": "noqa codes followed by a note",
+   "input": "import b  # noqa: I001 keep order\nimport a\nx = 1\nimport d  # noqa: I001x\nimport c\n",
+   "output": "import b  # noqa: I001 keep order\nimport a\nx = 1\nimport c\nimport d  # noqa: I001x\n"
+  },
+  {
+   "name": "noqa on the first line of a parenthesized import",
+   "input": "from x import (  # noqa\n    b,\n    a,\n)\nimport c\n",
+   "output": "from x import (  # noqa\n    b,\n    a,\n)\nimport c\n"
+  },
+  {
+   "name": "noqa after a parenthesized import's closing line",
+   "input": "import c\nfrom x import (\n    b,\n    a,\n)  # noqa\n",
+   "output": "import c\nfrom x import (\n    a,\n    b,\n)  # noqa\n"
+  },
+  {
+   "name": "noqa at the end of a continued first import",
+   "input": "import c, \\\n  b  # noqa\nimport a\n",
+   "output": "import c, \\\n  b  # noqa\nimport a\n"
+  },
+  {
+   "name": "noqa in a nested block",
+   "input": "def f():\n    import b  # noqa\n    import a\nimport d\nimport c\n",
+   "output": "def f():\n    import b  # noqa\n    import a\nimport c\nimport d\n"
+  },
+  {
+   "name": "a file noqa with an invalid code",
+   "input": "# ruff: noqa: I001x\nimport b\nimport a\n",
+   "output": "# ruff: noqa: I001x\nimport a\nimport b\n"
+  },
+  {
+   "name": "file noqa codes run together",
+   "input": "# ruff: noqa: E501I001\nimport b\nimport a\n",
+   "output": "# ruff: noqa: E501I001\nimport b\nimport a\n"
+  },
+  {
+   "name": "Ruff in capitals is not a file noqa",
+   "input": "# Ruff: noqa\nimport b\nimport a\n",
+   "output": "# Ruff: noqa\nimport a\nimport b\n"
+  },
+  {
+   "name": "skip_file inside an f-string field",
+   "input": "x = f\"\"\"{\n1  # isort: skip_file\n}\"\"\"\nimport b\nimport a\n",
+   "output": "x = f\"\"\"{\n1  # isort: skip_file\n}\"\"\"\nimport b\nimport a\n"
+  },
+  {
+   "name": "a file noqa inside an f-string field",
+   "input": "x = f\"\"\"{\n# ruff: noqa\n1}\"\"\"\nimport b\nimport a\n",
+   "output": "x = f\"\"\"{\n# ruff: noqa\n1}\"\"\"\nimport b\nimport a\n"
+  },
+  {
+   "name": "imports in a one-line body",
+   "input": "if True: import c; import b\nimport e\nimport d\ndef f(): import h; import g\nimport k\nimport j\n",
+   "output": "if True: import c; import b\nimport d\nimport e\n\n\ndef f(): import h; import g\nimport j\nimport k\n"
+  },
+  {
+   "name": "a block before a one-line body",
+   "input": "import b\nimport a\nif x: import c\n",
+   "output": "import a\nimport b\n\nif x: import c\n"
+  },
+  {
+   "name": "a dotted name across lines",
+   "input": "import os \\\n . path\nimport sys\nfrom os \\\n. path import join\n",
+   "output": "import sys\n\nimport os \\\n . path\nfrom os \\\n. path import join\n"
+  },
+  {
+   "name": "a dotted name across lines in a nested block",
+   "input": "def f():\n    import os \\\n     . path\n    import sys\n",
+   "output": "def f():\n    import sys\n\n    import os \\\n         . path\n"
+  },
+  {
+   "name": "unicode case",
+   "input": "from x import b, 𝔟, É, é, Ⓐ, ABß\n",
+   "output": "from x import b, 𝔟, É, é, Ⓐ, ABß\n"
+  },
+  {
+   "name": "tabs widen the line",
+   "input": "def f():\n\tfrom x import b, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n\tfrom y import b, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n",
+   "output": "def f():\n\tfrom x import (\n\t\taaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,\n\t\tb,\n\t)\n\tfrom y import aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, b\n"
+  },
+  {
+   "name": "wide characters widen the line",
+   "input": "from x import b, 漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢\nfrom y import b, 漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢\n",
+   "output": "from x import (\n    b,\n    漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢,\n)\nfrom y import b, 漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢\n"
+  },
+  {
+   "name": "relative dots across lines",
+   "input": "from . \\\n . import b\nimport a\nfrom . \\\n x import c\nfrom .. \\\n.y import d\n",
+   "output": "import a\n\nfrom ...y import d\nfrom .. import b\nfrom .x import c\n"
+  },
+  {
+   "name": "a backslash before a space does not continue a string",
+   "input": "s = 'x\\ \n'\nimport b\nimport a\n",
+   "output": "s = 'x\\ \n'\nimport b\nimport a\n"
+  },
+  {
+   "name": "a backslash before a space does not continue a line",
+   "input": "import b, \\ \n  a\nimport c\n",
+   "output": "import b, \\ \n  a\nimport c\n"
+  },
+  {
+   "name": "two backslashes do not continue a string",
+   "input": "s = 'x\\\\\n'\nimport b\nimport a\n",
+   "output": "s = 'x\\\\\n'\nimport b\nimport a\n"
+  },
+  {
+   "name": "two backslashes do not continue a raw, f- or t-string",
+   "input": "s = r'x\\\\\n'\nimport b\nimport a\n",
+   "output": "s = r'x\\\\\n'\nimport b\nimport a\n"
+  },
+  {
+   "name": "one backslash continues a one-line string",
+   "input": "s = 'x\\\n'\nimport b\nimport a\n",
+   "output": "s = 'x\\\n'\nimport a\nimport b\n"
+  },
+  {
+   "name": "three backslashes continue a one-line string",
+   "input": "s = f'x\\\\\\\n'\nimport b\nimport a\n",
+   "output": "s = f'x\\\\\\\n'\nimport a\nimport b\n"
+  },
+  {
+   "name": "an alias named null",
+   "input": "import os\nimport os as null  # keep\nfrom x import a, a as null\nfrom y import b as null, b\nprint(os.name, null.name)\n",
+   "output": "import os\nimport os as null  # keep\n\nfrom x import a\nfrom x import a as null\nfrom y import b\nfrom y import b as null\n\nprint(os.name, null.name)\n"
+  },
+  {
+   "name": "aliases named like JavaScript values",
+   "input": "import undefined\nimport os as undefined\nimport os as __proto__\nimport os as constructor\nimport os\n",
+   "output": "import os\nimport os as __proto__\nimport os as constructor\nimport os as undefined\n\nimport undefined\n"
+  },
+  {
+   "name": "names ordered by code point",
+   "input": "from x import xＦ, x𝐆\nfrom y import y𝐆, yＦ\n",
+   "output": "from x import xＦ, x𝐆\nfrom y import yＦ, y𝐆\n"
+  },
+  {
+   "name": "combining marks in names",
+   "input": "from x import é, a\nimport b́\nimport a\n",
+   "output": "import a\nimport b́\nfrom x import a, é\n"
+  },
+  {
+   "name": "a form feed in the indent",
+   "input": "def f():\n\f    import sys\n    import os\n",
+   "output": "def f():\n\f    import os\n\f    import sys\n"
+  }
+ ]
+}

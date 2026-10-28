@@ -163,7 +163,7 @@ export interface Adapter {
   openDialog?(template: DocumentFragment, callback: (value: unknown) => void,
     options: { bottom: boolean; value: string; selectValueOnOpen: boolean }): void;
   openNotification?(node: HTMLElement, options: { bottom: boolean; duration: number }): void;
-  getModeAt?(pos: Pos): { lineComment?: string; blockCommentStart?: string; blockCommentEnd?: string };
+  getModeAt?(pos: Pos): { name?: string; lineComment?: string; blockCommentStart?: string; blockCommentEnd?: string };
   state: {
     vim: VimState;
     lint?: { marked: { find(): { from: Pos; to: Pos } | undefined; __annotation?: { severity: string; message: string } }[] };
