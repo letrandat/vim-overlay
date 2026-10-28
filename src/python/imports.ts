@@ -93,7 +93,7 @@ function scan(lines: string[]) {
         i++;
       }
     }
-    const continued = /\\\s*$/.test(code);
+    const continued = code.endsWith("\\"); // a backslash continues a line only as its last character
     // A one-line string open at the end of its line is an error. A replacement field can run on
     // to the next line, even in a one-line f-string.
     if (!continued && oneLine(open.at(-1))) broken = true;
@@ -140,7 +140,7 @@ function parse(logical: Logical): (Statement | null)[] {
   if (COMPOUND.has(/^\s*([\p{ID_Continue}]*)/u.exec(logical.lines[0].code)![1])) return [null];
   for (const [i, { code }] of logical.lines.entries()) {
     const line = logical.start + i;
-    for (const m of code.replace(/\\\s*$/, "").matchAll(TOKEN)) {
+    for (const m of code.replace(/\\$/, "").matchAll(TOKEN)) {
       if (logical.semis.some((s) => s.line === line && s.col === m.index)) parts.push([]);
       else parts.at(-1)!.push({ text: m[0], line, col: m.index });
     }
@@ -152,17 +152,22 @@ function parse(logical: Logical): (Statement | null)[] {
 function statement(tokens: Token[], logical: Logical): Statement | null {
   let t = 0;
   const peek = () => tokens[t]?.text;
-  // A dotted name, which Python lets spaces split around its dots; ruff keeps its source text.
+  // The tokens of a dotted name, which Python lets spaces split around its dots.
   const dotted = () => {
     const run = [tokens[t++]];
     while (tokens[t] && !KEYWORDS.has(tokens[t].text) && (run.at(-1)!.text.endsWith(".") || tokens[t].text.startsWith("."))) run.push(tokens[t++]);
+    return run;
+  };
+  const joined = (run: Token[]) => run.map((r) => r.text).join("");
+  // The source text of tokens, across lines too, as ruff keeps a name.
+  const source = (run: Token[]) => {
     const [first, last] = [run[0], run.at(-1)!];
     const code = (line: number) => logical.lines[line - logical.start].code;
-    let source = code(first.line).slice(first.col, first.line === last.line ? last.col + last.text.length : undefined);
+    let text = code(first.line).slice(first.col, first.line === last.line ? last.col + last.text.length : undefined);
     for (let line = first.line + 1; line <= last.line; line++) {
-      source += "\n" + code(line).slice(0, line === last.line ? last.col + last.text.length : undefined);
+      text += "\n" + code(line).slice(0, line === last.line ? last.col + last.text.length : undefined);
     }
-    return { joined: run.map((r) => r.text).join(""), source, line: first.line };
+    return text;
   };
   const alias = (from: boolean, star: boolean): Alias | null => {
     if (!tokens[t]) return null;
@@ -171,9 +176,9 @@ function statement(tokens: Token[], logical: Logical): Statement | null {
       ({ text: name, line } = tokens[t++]);
       if (!IDENT.test(name) && !(star && name === "*")) return null;
     } else {
-      const d = dotted();
-      if (!DOTTED.test(d.joined)) return null;
-      ({ source: name, line } = d);
+      const run = dotted();
+      if (!DOTTED.test(joined(run))) return null;
+      [name, line] = [source(run), run[0].line];
     }
     let as: string | null = null;
     if (peek() === "as") {
@@ -193,11 +198,13 @@ function statement(tokens: Token[], logical: Logical): Statement | null {
     } while (peek() === "," && ++t);
   } else if (keyword === "from") {
     if (!tokens[t] || peek() === "import") return null;
-    const { joined, source } = dotted();
-    const m = /^(\.*)(.*)$/.exec(joined)!;
+    const run = dotted();
+    const m = /^(\.*)(.*)$/.exec(joined(run))!;
     if (m[2] && !DOTTED.test(m[2])) return null;
     if (!m[1] && !m[2]) return null;
-    [s.level, s.module] = [m[1].length, source.replace(/^[.\s]*/, "")];
+    // The dots give the level; the module's text starts at its first name, as ruff prints them.
+    const named = run.findIndex((r) => /[^.]/.test(r.text));
+    [s.level, s.module] = [m[1].length, named < 0 ? "" : source(run.slice(named)).replace(/^\.+/, "")];
     if (tokens[t++]?.text !== "import") return null;
     const parens = peek() === "(" && ++t;
     do {
@@ -544,7 +551,7 @@ export function organizeImports(buffer: string[]) {
     // ruff reads a noqa for the block on its first line, or on the last line of a first import
     // continued with backslashes.
     let noqaLine = block.statements[0].start;
-    while (/\\\s*$/.test(first.lines[noqaLine - first.start].code)) noqaLine++;
+    while (first.lines[noqaLine - first.start].code.endsWith("\\")) noqaLine++;
     if (block.fixable && !followed(lines, block.statements.at(-1)!) && !noqaHere(byLine.get(noqaLine))) {
       let end = last.end + 1;
       const after = next && !level(first.indent) ? linesAfter(lines, next) : 0;

@@ -592,6 +592,21 @@
    "output": "from x import (\n    b,\n    漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢,\n)\nfrom y import b, 漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢\n"
   },
   {
+   "name": "relative dots across lines",
+   "input": "from . \\\n . import b\nimport a\nfrom . \\\n x import c\nfrom .. \\\n.y import d\n",
+   "output": "import a\n\nfrom ...y import d\nfrom .. import b\nfrom .x import c\n"
+  },
+  {
+   "name": "a backslash before a space does not continue a string",
+   "input": "s = 'x\\ \n'\nimport b\nimport a\n",
+   "output": "s = 'x\\ \n'\nimport b\nimport a\n"
+  },
+  {
+   "name": "a backslash before a space does not continue a line",
+   "input": "import b, \\ \n  a\nimport c\n",
+   "output": "import b, \\ \n  a\nimport c\n"
+  },
+  {
    "name": "combining marks in names",
    "input": "from x import é, a\nimport b́\nimport a\n",
    "output": "import a\nimport b́\nfrom x import a, é\n"

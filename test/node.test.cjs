@@ -214,6 +214,7 @@ function run(box, file) {
   }
   assert.strictEqual(fails.length, 0, `${fails.length} organize-imports cases differ from ${ruff}`);
   assert.strictEqual(organizeImports(["import b", "import a", "x = (1,"]).untouched, "a string or bracket is not closed", "leaves a buffer with an unclosed bracket alone");
+  assert.strictEqual(organizeImports(["s = 'x\\ ", "'", "import b", "import a"]).untouched, "a string or bracket is not closed", "a backslash before a space does not continue a string");
   // Each old line maps to the new line it became; a line in a sorted block keeps its offset.
   const { lineMap } = organizeImports(["import os", "x = 1", "import sys", "y = 2"]);
   assert.strictEqual(JSON.stringify(lineMap), "[0,2,3,5]", "lines between blocks keep their place as blank lines are added");

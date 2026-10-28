@@ -124,6 +124,9 @@ module.exports = [
   ["unicode case", "from x import b, \u{1D51F}, É, é, Ⓐ, ABß\n"],
   ["tabs widen the line", "def f():\n\tfrom x import b, " + "a".repeat(68) + "\n\tfrom y import b, " + "a".repeat(66) + "\n"],
   ["wide characters widen the line", "from x import b, " + "漢".repeat(36) + "\nfrom y import b, " + "漢".repeat(35) + "\n"],
+  ["relative dots across lines", "from . \\\n . import b\nimport a\nfrom . \\\n x import c\nfrom .. \\\n.y import d\n"],
+  ["a backslash before a space does not continue a string", "s = 'x\\ \n'\nimport b\nimport a\n"],
+  ["a backslash before a space does not continue a line", "import b, \\ \n  a\nimport c\n"],
   ["combining marks in names", "from x import e\u0301, a\nimport b\u0301\nimport a\n"],
   ["a form feed in the indent", "def f():\n\f    import sys\n    import os\n"],
 ];
