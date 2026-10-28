@@ -8,6 +8,7 @@ import { install as indentObject } from "./features/indent-object.ts";
 import { install as entireObject } from "./features/entire-object.ts";
 import { install as yankToEol } from "./features/yank-to-eol.ts";
 import { install as clipboard } from "./features/clipboard.ts";
+import { install as yankFlash } from "./features/yank-flash.ts";
 import { install as complete } from "./features/complete.ts";
 import { install as moveLines } from "./features/move-lines.ts";
 import { install as bracketObjects } from "./features/bracket-objects.ts";
@@ -26,6 +27,7 @@ export const features = {
   "entire-object": entireObject,
   "yank-to-eol": yankToEol,
   clipboard,
+  "yank-flash": yankFlash,
   complete,
   "move-lines": moveLines,
   "bracket-objects": bracketObjects,
