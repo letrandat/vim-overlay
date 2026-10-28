@@ -290,6 +290,91 @@
    "name": "code between two blocks",
    "input": "import os\nx = 1\nimport sys\ny = 2\n",
    "output": "import os\n\nx = 1\nimport sys\n\ny = 2\n"
+  },
+  {
+   "name": "a field runs past the end of a one-line f-string's line",
+   "input": "s = f\"{\"\"\"\nimport sys\nimport os\n\"\"\"}\"\nimport b\nimport a\n",
+   "output": "s = f\"{\"\"\"\nimport sys\nimport os\n\"\"\"}\"\nimport a\nimport b\n"
+  },
+  {
+   "name": "the same in a t-string",
+   "input": "s = t\"{\"\"\"\nimport sys\nimport os\n\"\"\"}\"\nimport b\nimport a\n",
+   "output": "s = t\"{\"\"\"\nimport sys\nimport os\n\"\"\"}\"\nimport a\nimport b\n"
+  },
+  {
+   "name": "a comment inside a field",
+   "input": "s = f\"\"\"{1 # }\"\"\"\n}\nimport sys\nimport os\n\"\"\"\nimport b\nimport a\n",
+   "output": "s = f\"\"\"{1 # }\"\"\"\n}\nimport sys\nimport os\n\"\"\"\nimport a\nimport b\n"
+  },
+  {
+   "name": "a backslash before a field's brace",
+   "input": "s = rf\"\"\"\\{\"\"\"\nimport sys\nimport os\n\"\"\"}\"\"\"\nt = f\"\"\"\\{\"\"\"\nimport z\nimport y\n\"\"\"}\"\"\"\nimport b\nimport a\n",
+   "output": "s = rf\"\"\"\\{\"\"\"\nimport sys\nimport os\n\"\"\"}\"\"\"\nt = f\"\"\"\\{\"\"\"\nimport z\nimport y\n\"\"\"}\"\"\"\nimport a\nimport b\n"
+  },
+  {
+   "name": "a named character escape is not a field",
+   "input": "s = f\"\\N{BULLET} {x}\"\nimport b\nimport a\n",
+   "output": "s = f\"\\N{BULLET} {x}\"\nimport a\nimport b\n"
+  },
+  {
+   "name": "an unclosed one-line string ends with its line",
+   "input": "s = 'abc\nimport b\nimport a\n",
+   "output": "s = 'abc\nimport b\nimport a\n"
+  },
+  {
+   "name": "format specs are text",
+   "input": "x = f\"{id(y):#x} {y:{w}.{p}f} {d[\"k\"]!r:>{n}} {y:'#'}\"\nimport b\nimport a\n",
+   "output": "x = f\"{id(y):#x} {y:{w}.{p}f} {d[\"k\"]!r:>{n}} {y:'#'}\"\nimport a\nimport b\n"
+  },
+  {
+   "name": "colons inside a field's brackets are code",
+   "input": "x = f\"{d[1:2]} {(lambda: 1)()} {(y := 2)} {\"#\"}\"  # c\nimport b\nimport a\n",
+   "output": "x = f\"{d[1:2]} {(lambda: 1)()} {(y := 2)} {\"#\"}\"  # c\nimport a\nimport b\n"
+  },
+  {
+   "name": "a file-level flake8 noqa turns sorting off",
+   "input": "# flake8: noqa\nimport b\nimport a\n",
+   "output": "# flake8: noqa\nimport b\nimport a\n"
+  },
+  {
+   "name": "a file-level ruff noqa naming I001",
+   "input": "# ruff: noqa: E501, I001\nimport b\nimport a\n",
+   "output": "# ruff: noqa: E501, I001\nimport b\nimport a\n"
+  },
+  {
+   "name": "a noqa naming other rules does not",
+   "input": "# ruff: noqa: E501\nimport b\nimport a\n",
+   "output": "# ruff: noqa: E501\nimport a\nimport b\n"
+  },
+  {
+   "name": "isort skip_file",
+   "input": "import b\nimport a\n# isort: skip_file\n",
+   "output": "import b\nimport a\n# isort: skip_file\n"
+  },
+  {
+   "name": "__main__ is first-party",
+   "input": "import __main__\nfrom . import x\nimport requests\nimport os\nimport __main__.sub\n",
+   "output": "import os\n\nimport __main__.sub\nimport requests\n\nimport __main__\n\nfrom . import x\n"
+  },
+  {
+   "name": "the standard library as of Python 3.14",
+   "input": "import tomllib\nimport annotationlib\nimport parser\nimport distutils\nimport _testcapi\nimport zoneinfo\n",
+   "output": "import _testcapi\nimport annotationlib\nimport tomllib\nimport zoneinfo\n\nimport distutils\nimport parser\n"
+  },
+  {
+   "name": "comments on a line of several statements",
+   "input": "from __future__ import nested_scopes; import site  # noqa: F401\nimport b; import a  # c\nfrom x import d; from y import (f,  # cf\n    e)  # ce\nimport z; from w import v, u  # cw\n",
+   "output": "from __future__ import nested_scopes  # noqa: F401\n\nimport site\n\nimport a\nimport b  # c\nimport z  # cw\nfrom w import u, v\nfrom x import d  # cf\nfrom y import (\n    e,  # ce\n    f,\n)\n"
+  },
+  {
+   "name": "combining marks in names",
+   "input": "from x import é, a\nimport b́\nimport a\n",
+   "output": "import a\nimport b́\nfrom x import a, é\n"
+  },
+  {
+   "name": "a form feed in the indent",
+   "input": "def f():\n\f    import sys\n    import os\n",
+   "output": "def f():\n\f    import os\n\f    import sys\n"
   }
  ]
 }

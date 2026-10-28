@@ -36,7 +36,8 @@ function organizeImportsAction(cm: Adapter) {
   if (monacoOrganize?.isSupported?.()) return void monacoOrganize.run();
   if (!isPython(cm)) return notify(cm, "Organize imports works on Python here");
   const { first, lines } = bufferLines(cm);
-  const { lines: next, lineMap, skipped } = organizeImports(lines);
+  const { lines: next, lineMap, untouched } = organizeImports(lines);
+  if (untouched) return notify(cm, `Left the imports as they are: ${untouched}`);
   let from = 0;
   while (from < lines.length && from < next.length && lines[from] === next[from]) from++;
   let end = 0; // unchanged lines at the end
@@ -46,11 +47,10 @@ function organizeImportsAction(cm: Adapter) {
     const changed = next.slice(from, next.length - end);
     const cursor = cm.getCursor();
     replaceLines(cm, first, lines, from, to, changed);
-    // The cursor stays on its line wherever the sort moved it.
+    // The cursor follows its line; on a line in a sorted block, it keeps its offset in the block.
     const line = lineMap[cursor.line - first];
     cm.setCursor({ line: first + line, ch: Math.min(cursor.ch, next[line].length) });
   }
-  if (skipped) notify(cm, `Left ${skipped} import block${skipped > 1 ? "s" : ""} as is: a line holds several statements and a comment`);
 }
 
 export const install = (Vim: VimApi) => {

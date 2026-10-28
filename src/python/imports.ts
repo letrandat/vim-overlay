@@ -4,10 +4,12 @@ import { STDLIB } from "./stdlib.ts";
 // what Zed's organize imports runs for Python through ruff. Each run of import statements in one
 // body is a block; comments and blank lines inside it do not end it, any other statement does.
 // The steps follow ruff's crates/ruff_linter/src/rules/isort: annotate (attach comments),
-// normalize (merge statements), categorize (sections), order, format. ruff's settings it does not
-// read, such as isort: directives and first-party detection, take their defaults here.
+// normalize (merge statements), categorize (sections), order, format. It reads no settings: of the
+// directives it honors only those that turn sorting off for the file, and it detects no
+// first-party modules.
 const LINE_LENGTH = 88;
-const NAME = String.raw`[\p{L}_][\p{L}\p{N}_]*`;
+// Python identifiers: Unicode ID_Start (or _) then ID_Continue, which takes combining marks.
+const NAME = String.raw`[\p{ID_Start}_][\p{ID_Continue}]*`;
 const DOTTED = new RegExp(String.raw`^${NAME}(?:\.${NAME})*$`, "u");
 const IDENT = new RegExp(`^${NAME}$`, "u");
 
@@ -15,12 +17,20 @@ const IDENT = new RegExp(`^${NAME}$`, "u");
 interface Logical { start: number; end: number; indent: string; lines: { code: string; comment: string | null }[] }
 
 // A string open at the scan position, or a replacement field inside an f-string or t-string,
-// where code runs again and strings can nest with the same quotes (Python 3.12).
-type Open = { quote: string; fields: boolean } | { braces: number };
+// where code runs again and strings can nest with the same quotes (Python 3.12). brackets: those
+// open in the field's code; spec: past the field's top-level colon, in its format spec, which is
+// text with fields of its own.
+type Open = { quote: string; raw: boolean; fields: boolean } | { brackets: number; spec: boolean };
+
+const oneLine = (o: Open | undefined) => !!o && "quote" in o && o.quote.length === 1;
+// Python counts indentation from the last form feed at the start of a line.
+const level = (indent: string) => indent.slice(indent.lastIndexOf("\f") + 1);
 
 // Splits the buffer into logical lines, following brackets, strings and backslash continuations.
-// Lines outside any logical line are blank or hold only a comment.
+// Lines outside any logical line are blank or hold only a comment. broken: a string, field or
+// bracket is left open, a syntax error on which ruff changes nothing.
 function scan(lines: string[]) {
+  let broken = false;
   const logicals: Logical[] = [];
   const comments = new Map<number, string>(); // comment-only lines
   const open: Open[] = [];
@@ -32,30 +42,38 @@ function scan(lines: string[]) {
       const top = open.at(-1);
       const c = text[i];
       if (top && "quote" in top) {
-        if (c === "\\") i += 2;
-        else if (text.startsWith(top.quote, i)) (i += top.quote.length), open.pop();
+        if (c === "\\") {
+          // A backslash keeps the next character from ending the string, but never escapes a
+          // field's brace; \N{...} names a character in a string that is not raw.
+          const close = top.fields && !top.raw && text.startsWith("N{", i + 1) ? text.indexOf("}", i + 3) : -1;
+          i = close >= 0 ? close + 1 : top.fields && "{}".includes(text[i + 1]) ? i + 1 : i + 2;
+        } else if (text.startsWith(top.quote, i)) (i += top.quote.length), open.pop();
         else if (top.fields && (c === "{" || c === "}")) {
           if (text[i + 1] === c) i += 2; // {{ and }} stand for one brace
           else {
-            if (c === "{") open.push({ braces: 0 });
+            if (c === "{") open.push({ brackets: 0, spec: false });
             i++;
           }
         } else i++;
-      } else if (c === "#" && !top) {
-        (code = text.slice(0, i)), (comment = text.slice(i).trimEnd());
+      } else if (top?.spec) {
+        if (c === "{") open.push({ brackets: 0, spec: false });
+        else if (c === "}") open.pop();
+        i++;
+      } else if (c === "#") {
+        // In a replacement field, a comment also runs to the end of the line.
+        if (!top) (code = text.slice(0, i)), (comment = text.slice(i).trimEnd());
         break;
       } else if (c === '"' || c === "'") {
         const quote = text.startsWith(c.repeat(3), i) ? c.repeat(3) : c;
-        const prefix = /(?<![\p{L}\p{N}_])[rRbBfFtTuU]{1,2}$/u.exec(text.slice(0, i))?.[0] ?? "";
-        open.push({ quote, fields: /[fFtT]/.test(prefix) });
+        const prefix = /(?<![\p{ID_Continue}])[rRbBfFtTuU]{1,2}$/u.exec(text.slice(0, i))?.[0] ?? "";
+        open.push({ quote, raw: /[rR]/.test(prefix), fields: /[fFtT]/.test(prefix) });
         i += quote.length;
       } else if (top) {
-        // Inside a replacement field: its closing brace ends it.
-        if (c === "{") top.braces++;
-        else if (c === "}") {
-          if (top.braces) top.braces--;
-          else open.pop();
-        }
+        // A replacement field's code: its closing brace ends it, its top-level colon starts the spec.
+        if ("([{".includes(c)) top.brackets++;
+        else if (")]}".includes(c) && top.brackets) top.brackets--;
+        else if (c === "}") open.pop();
+        else if (c === ":" && !top.brackets) top.spec = true;
         i++;
       } else {
         if ("([{".includes(c)) depth++;
@@ -64,9 +82,9 @@ function scan(lines: string[]) {
       }
     }
     const continued = /\\\s*$/.test(code);
-    // An unclosed one-line string ends with its line, with any field inside it.
-    const oneLine = open.findIndex((o) => "quote" in o && o.quote.length === 1);
-    if (oneLine >= 0 && !continued) open.length = oneLine;
+    // A one-line string open at the end of its line is an error. A replacement field can run on
+    // to the next line, even in a one-line f-string.
+    if (!continued && oneLine(open.at(-1))) broken = true;
     if (!current && !code.trim()) {
       if (comment) comments.set(n, comment);
       return;
@@ -77,7 +95,7 @@ function scan(lines: string[]) {
     if (!open.length && !depth && !continued) logicals.push(current), (current = null);
   });
   if (current) logicals.push(current);
-  return { logicals, comments };
+  return { logicals, comments, broken: broken || open.length > 0 || depth > 0 || !!current };
 }
 
 interface Alias { name: string; as: string | null; line: number; atop: string[]; inline: string[]; trailing: string[] }
@@ -90,13 +108,15 @@ interface Statement {
   inline: string[];
   trailing: string[];
   comma: boolean; // a trailing comma inside parentheses keeps the statement split, as ruff does
+  start: number; // the lines of its first and last token
+  end: number;
 }
 
 // The statements of a logical line that holds only imports, or null.
 function parse(logical: Logical): Statement[] | null {
   const tokens: { text: string; line: number }[] = [];
   for (const [i, { code }] of logical.lines.entries()) {
-    for (const m of code.replace(/\\\s*$/, "").matchAll(/[\p{L}\p{N}_.]+|[*,();]|\S/gu)) tokens.push({ text: m[0], line: logical.start + i });
+    for (const m of code.replace(/\\\s*$/, "").matchAll(/[\p{ID_Continue}.]+|[*,();]|\S/gu)) tokens.push({ text: m[0], line: logical.start + i });
   }
   const statements: Statement[] = [];
   let t = 0;
@@ -114,8 +134,8 @@ function parse(logical: Logical): Statement[] | null {
     return { name: name.text, as, line: name.line, atop: [], inline: [], trailing: [] };
   };
   while (t < tokens.length) {
-    const keyword = tokens[t++].text;
-    const statement: Statement = { from: keyword === "from", module: "", level: 0, aliases: [], atop: [], inline: [], trailing: [], comma: false };
+    const { text: keyword, line: start } = tokens[t++];
+    const statement: Statement = { from: keyword === "from", module: "", level: 0, aliases: [], atop: [], inline: [], trailing: [], comma: false, start, end: start };
     if (keyword === "import") {
       do {
         const a = alias(false);
@@ -143,14 +163,16 @@ function parse(logical: Logical): Statement[] | null {
       }
       if (!statement.aliases.length) return null;
     } else return null;
+    statement.end = tokens[t - 1].line;
     statements.push(statement);
     if (t < tokens.length && tokens[t++].text !== ";") return null;
   }
   return statements;
 }
 
-// Attaches the comments of a one-statement logical line as ruff's annotate_imports does.
-function annotate(statement: Statement, logical: Logical) {
+// Attaches the comments of a logical line to its statements in order, as ruff's annotate_imports
+// does: each statement takes the comments up to the end of its last line before the next one does.
+function annotate(statements: Statement[], logical: Logical) {
   const comments = logical.lines
     .map(({ comment }, i) => comment && { line: logical.start + i, text: comment })
     .filter((c) => !!c);
@@ -159,18 +181,21 @@ function annotate(statement: Statement, logical: Logical) {
     while (comments.length && test(comments[0].line)) taken.push(comments.shift()!.text);
     return taken;
   };
-  if (!statement.from) {
-    statement.inline = take(() => true);
-    return;
+  for (const s of statements) {
+    s.atop.push(...take((line) => line < s.start));
+    if (!s.from) {
+      s.inline = take((line) => line <= s.end);
+      continue;
+    }
+    // A comment after a one-line, one-member from import belongs to the member.
+    if (s.aliases.length > 1 || s.aliases[0].line !== s.start) s.inline = take((line) => line === s.start);
+    for (const a of s.aliases) {
+      a.atop = take((line) => line < a.line);
+      a.inline = take((line) => line === a.line);
+    }
+    s.aliases.at(-1)!.trailing = take((line) => line < s.end);
+    s.trailing = take((line) => line === s.end);
   }
-  const [first] = statement.aliases;
-  if (statement.aliases.length > 1 || first.line !== logical.start) statement.inline = take((line) => line === logical.start);
-  for (const a of statement.aliases) {
-    a.atop = take((line) => line < a.line);
-    a.inline = take((line) => line === a.line);
-  }
-  statement.aliases.at(-1)!.trailing = take((line) => line < logical.end);
-  statement.trailing = take(() => true);
 }
 
 // natord::compare, as ruff orders names: digit runs compare as numbers.
@@ -222,10 +247,12 @@ const moduleKey = (module: string | null, as: string | null, level: number, firs
   as,
 ];
 
-const SECTIONS = ["future", "stdlib", "third", "local"] as const;
+// ruff's sections; without project settings, only __main__ is first-party.
+const SECTIONS = ["future", "stdlib", "third", "first", "local"] as const;
 function section(module: string, level: number) {
   const top = module.split(".")[0];
-  return level ? "local" : top === "__future__" ? "future" : STDLIB.has(top) ? "stdlib" : "third";
+  if (level) return "local";
+  return top === "__future__" ? "future" : STDLIB.has(top) ? "stdlib" : module === "__main__" ? "first" : "third";
 }
 
 interface Straight { name: string; as: string | null; atop: string[]; inline: string[]; index: number }
@@ -347,37 +374,36 @@ function linesAfter(lines: string[], next: Logical) {
   return 2;
 }
 
+// File-level comments that keep ruff from sorting: a blanket noqa, one naming I001, or isort's.
+const OFF = /^#\s*(?:(?:ruff|flake8)\s*:\s*noqa\s*$|ruff\s*:\s*noqa\s*:.*\bI001\b|isort\s*:\s*skip_file\b)/i;
+
 // The buffer with every import block sorted; for each old line, the new line it became, or for a
-// line in a sorted block, the line at the same offset in the new block; and how many blocks were
-// left as they are because a line in them holds more than one statement and a comment.
+// line in a sorted block, the line at the same offset in the new block; and why the whole buffer
+// was left alone, if it was.
 export function organizeImports(lines: string[]) {
-  const { logicals, comments } = scan(lines);
-  const unit = logicals.find((l) => l.indent)?.indent ?? "    ";
+  const { logicals, comments, broken } = scan(lines);
+  const untouched = broken ? "a string or bracket is not closed" : [...comments.values()].some((c) => OFF.test(c)) ? "the file turns off import sorting" : null;
+  if (untouched) return { lines: [...lines], lineMap: lines.map((_, i) => i), untouched };
+  const unit = logicals.map((l) => level(l.indent)).find((indent) => indent) ?? "    ";
   const out: string[] = [];
   const lineMap: number[] = [];
   let copied = 0; // lines before this index are in out
   const copy = (to: number) => {
     for (; copied < to; copied++) lineMap.push(out.push(lines[copied]) - 1);
   };
-  let skipped = 0;
-  let block: { logicals: Logical[]; statements: Statement[]; ok: boolean } | null = null;
+  let block: { logicals: Logical[]; statements: Statement[] } | null = null;
 
   const finish = (next: Logical | undefined) => {
     if (!block) return;
     const first = block.logicals[0], last = block.logicals.at(-1)!;
     let end = last.end + 1;
-    const after = next && !first.indent ? linesAfter(lines, next) : 0;
+    const after = next && !level(first.indent) ? linesAfter(lines, next) : 0;
     if (after) while (blank(lines[end])) end++;
     copy(first.start);
-    if (block.ok) {
-      const start = out.length;
-      out.push(...format(block.statements, first.indent, unit).map((s) => (s ? first.indent + s : s)));
-      for (let i = 0; i < after; i++) out.push("");
-      for (; copied < end; copied++) lineMap.push(Math.min(start + copied - first.start, out.length - 1));
-    } else {
-      skipped++;
-      copy(end);
-    }
+    const start = out.length;
+    out.push(...format(block.statements, first.indent, unit).map((s) => (s ? first.indent + s : s)));
+    for (let i = 0; i < after; i++) out.push("");
+    for (; copied < end; copied++) lineMap.push(Math.min(start + copied - first.start, out.length - 1));
     block = null;
   };
 
@@ -388,19 +414,17 @@ export function organizeImports(lines: string[]) {
       continue;
     }
     if (!statements.length) continue; // a backslash before a blank line: nothing, as in Python
-    if (block && block.logicals[0].indent !== logical.indent) finish(logical);
-    block ??= { logicals: [], statements: [], ok: true };
+    if (block && level(block.logicals[0].indent) !== level(logical.indent)) finish(logical);
+    block ??= { logicals: [], statements: [] };
     // Comment lines since the previous statement go above this one; before the first, they stay.
     const prev = block.logicals.at(-1);
     const atop = prev ? [...comments.entries()].filter(([n]) => n > prev.end && n < logical.start).map(([, c]) => c) : [];
-    const hasComments = logical.lines.some((l) => l.comment);
-    if (statements.length > 1 && hasComments) block.ok = false;
-    if (statements.length === 1) annotate(statements[0], logical);
     statements[0].atop = atop;
+    annotate(statements, logical);
     block.logicals.push(logical);
     block.statements.push(...statements);
   }
   finish(undefined);
   copy(lines.length);
-  return { lines: out, lineMap, skipped };
+  return { lines: out, lineMap, untouched };
 }

@@ -18,13 +18,18 @@ async function after({ page, check, play }) {
   got = await play(SORTED, [1, 2], "<S-A-o>");
   check("sorted imports stay as they are", JSON.stringify(got.lines) === JSON.stringify(SORTED) && JSON.stringify(got.cursor) === "[1,2]", JSON.stringify(got));
 
+  got = await play(["import b", "import a", "x = (1,"], [0, 0], "<S-A-o>");
+  let shown = await page.evaluate(() => document.body.innerText);
+  check("a file with a bracket left open is left alone, with a message", JSON.stringify(got.lines) === JSON.stringify(["import b", "import a", "x = (1,"]) && shown.includes("a string or bracket is not closed"), JSON.stringify(got.lines));
+  await page.keyboard.press("Escape");
+
   await page.evaluate(() => {
     const { cm } = window;
     if (cm.editor) monaco.editor.setModelLanguage(cm.editor.getModel(), "plaintext");
     else cm.setOption("mode", "text/plain");
   });
   got = await play(UNSORTED, [0, 0], "<S-A-o>");
-  const shown = await page.evaluate(() => document.body.innerText);
+  shown = await page.evaluate(() => document.body.innerText);
   check("other languages are left alone, with a message", JSON.stringify(got.lines) === JSON.stringify(UNSORTED) && shown.includes("Organize imports works on Python here"), JSON.stringify(got.lines));
   await page.evaluate(() => {
     const { cm } = window;
