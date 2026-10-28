@@ -6,14 +6,16 @@
      ?runtimes=2: two runtimes share the chunk array; the page uses the second.
      ?mangle=1: monaco-vim's export is a getter under a shortened name, as production builds emit.
      ?init=1: monaco-vim exports only initVimMode, as CoderPad's build does after dropping the unused
-     adapter class. -->
+     adapter class.
+     ?rspack=1: the chunk array is rspackChunk<name>, as Rspack names it (HackerRank CodePair). -->
 <meta charset="utf-8" />
 <div id="editor" style="width: 900px; height: 500px"></div>
 <div id="status"></div>
 <div id="plain" style="width: 900px; height: 100px"></div>
 <script src="common.js"></script>
 <script>
-  self.webpackChunkfixture = [];
+  const chunkGlobal = new URLSearchParams(location.search).has("rspack") ? "rspackChunkfixture" : "webpackChunkfixture";
+  self[chunkGlobal] = [];
 
   // webpack 5's JSONP chunk runtime, reduced to what a page with loaded chunks runs.
   function installWebpackRuntime(name) {
@@ -51,7 +53,7 @@
     const params = new URLSearchParams(location.search);
     const source = await (await fetch("https://cdn.jsdelivr.net/npm/monaco-vim@0.4.4/dist/monaco-vim.umd.js")).text();
     let webpackRequire;
-    for (let i = 0; i < Number(params.get("runtimes") ?? 1); i++) webpackRequire = installWebpackRuntime("webpackChunkfixture");
+    for (let i = 0; i < Number(params.get("runtimes") ?? 1); i++) webpackRequire = installWebpackRuntime(chunkGlobal);
     const editorChunk = [["editor"], { "monaco-editor/esm/vs/editor/editor.api": (module) => (module.exports = monaco) }];
     // The UMD build takes its CommonJS branch here, as the ESM build would in a real bundle.
     const wrap = (exportsCode) =>
@@ -70,11 +72,11 @@
     if (params.has("delay")) {
       monaco.editor.create(document.getElementById("plain"), { value: "no vim here" });
       // Long enough for the extension to poll while monaco-vim cannot run yet.
-      self.webpackChunkfixture.push(vimChunk);
+      self[chunkGlobal].push(vimChunk);
       await new Promise((resolve) => setTimeout(resolve, 2500));
     }
-    self.webpackChunkfixture.push(editorChunk);
-    self.webpackChunkfixture.push(vimChunk);
+    self[chunkGlobal].push(editorChunk);
+    self[chunkGlobal].push(vimChunk);
     const vimExports = webpackRequire("monaco-vim");
     const MonacoVim = params.has("mangle")
       ? { VimMode: vimExports.F, initVimMode: vimExports.P }
