@@ -1,5 +1,6 @@
 // Some pages bundle their Vim mode with webpack 5 and set no global (CodeSignal bundles monaco-vim).
-// Webpack keeps loaded chunks in a page global, webpackChunk<name>. Pushing a chunk with a runtime
+// Webpack keeps loaded chunks in a page global, webpackChunk<name>; Rspack, which emits the same
+// runtime, names it rspackChunk<name> (HackerRank CodePair). Pushing a chunk with a runtime
 // function hands back each runtime's require. The host reads Vim from modules the page has already
 // run and does not run an unrun module's factory: a module run early can throw and leave the page a
 // broken copy. Reading a Proxy export still runs its traps, which can load other modules early, and so
@@ -29,6 +30,7 @@ const pushed = new WeakSet<unknown[]>(); // chunk arrays this copy of the script
 // require -> { chunks, walked: walk key at the last walk, seen: Map of module id -> factory, candidates: Set of ids, vims }
 const runtimes = new Map<WebpackRequire, Runtime>();
 const EDITOR = ".monaco-editor, .cm-editor, .CodeMirror, .ace_editor";
+const CHUNKS = /^(?:webpack|rspack)Chunk/;
 // Where vim.js builds its API object. Most modules that only use the API do not match. Development
 // builds wrap each module in an eval string, where line breaks are the two characters \n.
 const DEFINES_VIM = /[{,](?:\s|\\[nrt])*defineMotion(?:\s|\\[nrt])*[:(,}]/;
@@ -154,7 +156,7 @@ function vimsIn(exports: unknown) {
 }
 
 export const find = () => {
-  for (const key of Object.keys(window).filter((k) => k.startsWith("webpackChunk"))) {
+  for (const key of Object.keys(window).filter((k) => CHUNKS.test(k))) {
     let chunks;
     try {
       chunks = property(window, key);

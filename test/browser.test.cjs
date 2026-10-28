@@ -44,6 +44,7 @@ const CONFIGS = [
   { host: "webpack", page: "monaco-webpack.html", found: true },
   { host: "webpack", page: "monaco-webpack.html?delay=1&runtimes=2&mangle=1", found: true },
   { host: "webpack", page: "monaco-webpack.html?init=1", found: true },
+  { host: "webpack", page: "monaco-webpack.html?rspack=1", found: true },
 ];
 
 const installed = (page) => page.evaluate(() => window.calls);
