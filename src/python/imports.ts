@@ -41,6 +41,7 @@ function scan(lines: string[]) {
   const logicals: Logical[] = [];
   const comments = new Map<number, string>(); // comment-only lines
   const every: { text: string; own: boolean }[] = []; // every comment, and whether it has a line to itself
+  const byLine = new Map<number, string>(); // each line's comment outside strings
   const open: Open[] = [];
   let depth = 0;
   let current: Logical | null = null;
@@ -70,10 +71,8 @@ function scan(lines: string[]) {
         i++;
       } else if (c === "#") {
         // In a replacement field, a comment also runs to the end of the line.
-        if (!top) {
-          (code = text.slice(0, i)), (comment = text.slice(i).trimEnd());
-          every.push({ text: comment, own: !code.trim() });
-        }
+        every.push({ text: text.slice(i).trimEnd(), own: !text.slice(0, i).trim() });
+        if (!top) (code = text.slice(0, i)), (comment = text.slice(i).trimEnd()), byLine.set(n, comment);
         break;
       } else if (c === '"' || c === "'") {
         const quote = text.startsWith(c.repeat(3), i) ? c.repeat(3) : c;
@@ -109,7 +108,7 @@ function scan(lines: string[]) {
     if (!open.length && !depth && !continued) logicals.push(current), (current = null);
   });
   if (current) logicals.push(current);
-  return { logicals, comments, every, broken: broken || open.length > 0 || depth > 0 || !!current };
+  return { logicals, comments, every, byLine, broken: broken || open.length > 0 || depth > 0 || !!current };
 }
 
 interface Alias { name: string; as: string | null; line: number; atop: string[]; inline: string[]; trailing: string[] }
@@ -130,11 +129,15 @@ interface Statement {
 interface Token { text: string; line: number; col: number }
 const TOKEN = /[\p{ID_Continue}.]+|[*,();]|\S/gu;
 const KEYWORDS = new Set(["import", "as"]);
+// Statements whose body can follow their colon on the same line, in a scope of its own.
+const COMPOUND = new Set(["if", "elif", "else", "for", "while", "with", "try", "except", "finally", "def", "class", "async"]);
 
 // The statements of a logical line, split at its semicolons: each an import, or null for any
 // other statement. None for a line with no tokens, such as a backslash before a blank line.
 function parse(logical: Logical): (Statement | null)[] {
   const parts: Token[][] = [[]];
+  // An import in a one-line body, as in `if x: import y`, belongs to that body, not to this block.
+  if (COMPOUND.has(/^\s*([\p{ID_Continue}]*)/u.exec(logical.lines[0].code)![1])) return [null];
   for (const [i, { code }] of logical.lines.entries()) {
     const line = logical.start + i;
     for (const m of code.replace(/\\\s*$/, "").matchAll(TOKEN)) {
@@ -154,9 +157,11 @@ function statement(tokens: Token[], logical: Logical): Statement | null {
     const run = [tokens[t++]];
     while (tokens[t] && !KEYWORDS.has(tokens[t].text) && (run.at(-1)!.text.endsWith(".") || tokens[t].text.startsWith("."))) run.push(tokens[t++]);
     const [first, last] = [run[0], run.at(-1)!];
-    const source = first.line === last.line
-      ? logical.lines[first.line - logical.start].code.slice(first.col, last.col + last.text.length)
-      : run.map((r) => r.text).join("");
+    const code = (line: number) => logical.lines[line - logical.start].code;
+    let source = code(first.line).slice(first.col, first.line === last.line ? last.col + last.text.length : undefined);
+    for (let line = first.line + 1; line <= last.line; line++) {
+      source += "\n" + code(line).slice(0, line === last.line ? last.col + last.text.length : undefined);
+    }
     return { joined: run.map((r) => r.text).join(""), source, line: first.line };
   };
   const alias = (from: boolean, star: boolean): Alias | null => {
@@ -278,8 +283,10 @@ function compare(a: Key, b: Key) {
 
 // MemberKey: star first, then constants, classes and variables, each case-insensitively.
 function memberKey(name: string, as: string | null): Key {
-  const cased = /\p{Lu}|\p{Ll}/u.test(name) && name === name.toUpperCase();
-  const type = name.length > 1 && cased ? 0 : /^\p{Lu}/u.test(name) ? 1 : 2;
+  // ruff's is_cased_uppercase, on a name longer than one UTF-8 byte.
+  const long = [...name].length > 1 || name.codePointAt(0)! >= 0x80;
+  const constant = long && !/\p{Lowercase}/u.test(name) && /\p{Uppercase}/u.test(name);
+  const type = constant ? 0 : /^\p{Uppercase}/u.test(name) ? 1 : 2;
   return [name === "*" ? 0 : 1, type, name.toLowerCase(), name, as];
 }
 
@@ -348,6 +355,21 @@ function normalize(statements: Statement[]) {
   return { straight: [...straight.values()], from: [...from.values()] };
 }
 
+// A line's width as ruff's LineWidthBuilder counts it: tabs to the next multiple of 4, wide East
+// Asian characters as 2, combining marks as 0; a line break starts the count again.
+const WIDE = /[\u1100-\u115F\u2E80-\u303E\u3041-\u33FF\u3400-\u4DBF\u4E00-\u9FFF\uA000-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFF60\uFFE0-\uFFE6\u{20000}-\u{3FFFD}]/u;
+function width(text: string) {
+  let w = 0, column = 0;
+  for (const c of text) {
+    if (c === "\t") {
+      const tab = 4 - (column % 4);
+      (w += tab), (column += tab);
+    } else if (c === "\n") (w = 0), (column = 0);
+    else (w += /\p{Mn}|\p{Me}/u.test(c) ? 0 : WIDE.test(c) ? 2 : 1), column++;
+  }
+  return w;
+}
+
 const suffix = (comments: string[]) => comments.map((c) => "  " + c).join("");
 
 function formatStraight(s: Straight, first: boolean) {
@@ -365,7 +387,7 @@ function formatFrom(g: FromGroup, aliases: Alias[], first: boolean, indent: stri
   const plain = aliases.length === 1 || aliases.every((a) => !a.atop.length && !a.inline.length && !a.trailing.length);
   if ((aliases.length === 1 && star) || (!g.comma && plain)) {
     const line = head + names.join(", ") + suffix(g.inline) + suffix(aliases.flatMap((a) => [...a.atop, ...a.inline, ...a.trailing])) + suffix(g.trailing);
-    if (star || [...indent + line].length <= LINE_LENGTH) return [...out, line];
+    if (star || width(indent + line) <= LINE_LENGTH) return [...out, line];
   }
   out.push(head + "(" + suffix(g.inline));
   aliases.forEach((a, i) => {
@@ -423,21 +445,66 @@ function linesAfter(lines: string[], next: Logical) {
 // isort's skip_file, in any comment, as ruff spells it.
 const SKIP_FILE = new Set(["# isort: skip_file", "# isort:skip_file", "# ruff: isort: skip_file", "# ruff: isort:skip_file"]);
 
+// What follows `noqa`, as ruff's lex_directive reads it: "all" for a blanket noqa, the codes
+// after a colon, or null when it is invalid (a suffix such as noqaX, or a code such as I001x).
+function noqaCodes(rest: string): "all" | string[] | null {
+  let i = 0;
+  if (rest[0] !== ":") {
+    if (!rest || rest[0] === "#") return "all";
+    if (!/\s/.test(rest[0])) return null;
+    i = rest.length - rest.trimStart().length;
+    if (rest[i] !== ":") return "all";
+  }
+  i++;
+  const codes: string[] = [];
+  let joined = false; // the last code ran straight into this one, as in F401F841
+  while (i < rest.length) {
+    while (/\s/.test(rest[i] ?? "")) i++;
+    if (rest[i] === ",") {
+      i++;
+      continue;
+    }
+    const code = /^([A-Z]+)([0-9]*)/.exec(rest.slice(i));
+    if (!code) break; // a note after the codes ends them
+    if (!code[2]) {
+      if (joined) return null;
+      break;
+    }
+    codes.push(code[0]);
+    i += code[0].length;
+    const next = rest[i];
+    if (next === undefined) break;
+    if (next === "," || next === "#" || /\s/.test(next)) joined = false;
+    else if (/[A-Z]/.test(next)) joined = true;
+    else return null;
+  }
+  return codes.length ? codes : null;
+}
+
+const silences = (codes: "all" | string[] | null) => codes === "all" || !!codes?.includes("I001");
+
+// The first comment in text from which test matches, with what follows it, as ruff scans each #.
+function directive(text: string, test: RegExp) {
+  for (const m of text.matchAll(/#/g)) {
+    const found = test.exec(text.slice(m.index + 1));
+    if (found) return text.slice(m.index + 1 + found[0].length);
+  }
+  return null;
+}
+
 // Whether a comment turns import sorting off for the file, as ruff reads it: isort's skip_file,
-// or a file-level noqa on a line of its own (ruff's lex_file_exemption) that is blanket or whose
-// codes name I001.
+// or a file-level noqa on a line of its own (ruff's lex_file_exemption) that is blanket or names
+// I001.
 function turnsSortingOff({ text, own }: { text: string; own: boolean }) {
   if (SKIP_FILE.has(text)) return true;
-  const noqa = own && /#\s*(?:ruff|flake8)\s*:\s*[nN][oO][qQ][aA]/.exec(text);
-  if (!noqa) return false;
-  const rest = text.slice(noqa.index + noqa[0].length);
-  if (!rest || rest[0] === "#" || (/^\s/.test(rest) && !rest.trimStart().startsWith(":"))) return true;
-  if (!/^\s*:/.test(rest)) return false; // such as noqaX, which ruff rejects
-  // Codes run until the first word that is not one.
-  const code = /[\s,]*([A-Z]+[0-9]+)/y;
-  code.lastIndex = rest.indexOf(":") + 1;
-  for (let m; (m = code.exec(rest)); ) if (m[1] === "I001") return true;
-  return false;
+  const rest = own ? directive(text, /^\s*(?:ruff|flake8)\s*:\s*[nN][oO][qQ][aA]/) : null;
+  return rest !== null && silences(noqaCodes(rest));
+}
+
+// Whether a line's comment silences I001 there, as ruff's line-level noqa does.
+function noqaHere(comment: string | undefined) {
+  const rest = comment ? directive(comment, /^\s*[nN][oO][qQ][aA]/) : null;
+  return rest !== null && silences(noqaCodes(rest));
 }
 
 // Whether a statement's line goes on past it with more than a comment: a semicolon or a backslash.
@@ -456,7 +523,7 @@ export function organizeImports(buffer: string[]) {
   // ruff reads a file without its byte order mark and writes the mark back.
   const bom = buffer[0]?.startsWith("﻿") ? "﻿" : "";
   const lines = bom ? [buffer[0].slice(1), ...buffer.slice(1)] : buffer;
-  const { logicals, comments, every, broken } = scan(lines);
+  const { logicals, comments, every, byLine, broken } = scan(lines);
   const untouched = broken ? "a string or bracket is not closed" : every.some(turnsSortingOff) ? "the file turns off import sorting" : null;
   if (untouched) return { lines: [...buffer], lineMap: buffer.map((_, i) => i), untouched };
   const unit = logicals.map((l) => level(l.indent)).find((indent) => indent) ?? "    ";
@@ -474,13 +541,19 @@ export function organizeImports(buffer: string[]) {
   const finish = (next: Logical | undefined) => {
     if (!block) return;
     const first = block.logicals[0], last = block.logicals.at(-1)!;
-    if (block.fixable && !followed(lines, block.statements.at(-1)!)) {
+    // ruff reads a noqa for the block on its first line, or on the last line of a first import
+    // continued with backslashes.
+    let noqaLine = block.statements[0].start;
+    while (/\\\s*$/.test(first.lines[noqaLine - first.start].code)) noqaLine++;
+    if (block.fixable && !followed(lines, block.statements.at(-1)!) && !noqaHere(byLine.get(noqaLine))) {
       let end = last.end + 1;
       const after = next && !level(first.indent) ? linesAfter(lines, next) : 0;
       if (after) while (blank(lines[end])) end++;
       copy(first.start);
       const start = out.length;
-      out.push(...format(block.statements, first.indent, unit).map((s) => (s ? first.indent + s : s)));
+      // Every line takes the block's indent, including a name's continuation lines, as in ruff.
+      const formatted = format(block.statements, first.indent, unit).flatMap((s) => s.split("\n"));
+      out.push(...formatted.map((s) => (/\S/.test(s) ? first.indent + s : s)));
       for (let i = 0; i < after; i++) out.push("");
       for (; copied < end; copied++) lineMap.push(Math.min(start + copied - first.start, out.length - 1));
     }

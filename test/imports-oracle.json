@@ -492,6 +492,106 @@
    "output": "from x import a.b\nimport c\n"
   },
   {
+   "name": "a noqa on the block's first import",
+   "input": "import b  # noqa: I001\nimport a\nimport d  # noqa\nimport c\n",
+   "output": "import b  # noqa: I001\nimport a\nimport d  # noqa\nimport c\n"
+  },
+  {
+   "name": "a noqa on a later import does not count",
+   "input": "import c\nimport b  # noqa\nimport a\n",
+   "output": "import a\nimport b  # noqa\nimport c\n"
+  },
+  {
+   "name": "noqa forms on an import line",
+   "input": "import b  #NOQA:I001\nimport a\nx = 1\nimport d  # noqa: E501\nimport c\ny = 2\nimport f  # see noqa\nimport e\nz = 3\nimport h  # x # noqa\nimport g\n",
+   "output": "import b  #NOQA:I001\nimport a\nx = 1\nimport c\nimport d  # noqa: E501\n\ny = 2\nimport e\nimport f  # see noqa\n\nz = 3\nimport h  # x # noqa\nimport g\n"
+  },
+  {
+   "name": "noqa codes followed by a note",
+   "input": "import b  # noqa: I001 keep order\nimport a\nx = 1\nimport d  # noqa: I001x\nimport c\n",
+   "output": "import b  # noqa: I001 keep order\nimport a\nx = 1\nimport c\nimport d  # noqa: I001x\n"
+  },
+  {
+   "name": "noqa on the first line of a parenthesized import",
+   "input": "from x import (  # noqa\n    b,\n    a,\n)\nimport c\n",
+   "output": "from x import (  # noqa\n    b,\n    a,\n)\nimport c\n"
+  },
+  {
+   "name": "noqa after a parenthesized import's closing line",
+   "input": "import c\nfrom x import (\n    b,\n    a,\n)  # noqa\n",
+   "output": "import c\nfrom x import (\n    a,\n    b,\n)  # noqa\n"
+  },
+  {
+   "name": "noqa at the end of a continued first import",
+   "input": "import c, \\\n  b  # noqa\nimport a\n",
+   "output": "import c, \\\n  b  # noqa\nimport a\n"
+  },
+  {
+   "name": "noqa in a nested block",
+   "input": "def f():\n    import b  # noqa\n    import a\nimport d\nimport c\n",
+   "output": "def f():\n    import b  # noqa\n    import a\nimport c\nimport d\n"
+  },
+  {
+   "name": "a file noqa with an invalid code",
+   "input": "# ruff: noqa: I001x\nimport b\nimport a\n",
+   "output": "# ruff: noqa: I001x\nimport a\nimport b\n"
+  },
+  {
+   "name": "file noqa codes run together",
+   "input": "# ruff: noqa: E501I001\nimport b\nimport a\n",
+   "output": "# ruff: noqa: E501I001\nimport b\nimport a\n"
+  },
+  {
+   "name": "Ruff in capitals is not a file noqa",
+   "input": "# Ruff: noqa\nimport b\nimport a\n",
+   "output": "# Ruff: noqa\nimport a\nimport b\n"
+  },
+  {
+   "name": "skip_file inside an f-string field",
+   "input": "x = f\"\"\"{\n1  # isort: skip_file\n}\"\"\"\nimport b\nimport a\n",
+   "output": "x = f\"\"\"{\n1  # isort: skip_file\n}\"\"\"\nimport b\nimport a\n"
+  },
+  {
+   "name": "a file noqa inside an f-string field",
+   "input": "x = f\"\"\"{\n# ruff: noqa\n1}\"\"\"\nimport b\nimport a\n",
+   "output": "x = f\"\"\"{\n# ruff: noqa\n1}\"\"\"\nimport b\nimport a\n"
+  },
+  {
+   "name": "imports in a one-line body",
+   "input": "if True: import c; import b\nimport e\nimport d\ndef f(): import h; import g\nimport k\nimport j\n",
+   "output": "if True: import c; import b\nimport d\nimport e\n\n\ndef f(): import h; import g\nimport j\nimport k\n"
+  },
+  {
+   "name": "a block before a one-line body",
+   "input": "import b\nimport a\nif x: import c\n",
+   "output": "import a\nimport b\n\nif x: import c\n"
+  },
+  {
+   "name": "a dotted name across lines",
+   "input": "import os \\\n . path\nimport sys\nfrom os \\\n. path import join\n",
+   "output": "import sys\n\nimport os \\\n . path\nfrom os \\\n. path import join\n"
+  },
+  {
+   "name": "a dotted name across lines in a nested block",
+   "input": "def f():\n    import os \\\n     . path\n    import sys\n",
+   "output": "def f():\n    import sys\n\n    import os \\\n         . path\n"
+  },
+  {
+   "name": "unicode case",
+   "input": "from x import b, 𝔟, É, é, Ⓐ, ABß\n",
+   "output": "from x import b, 𝔟, É, é, Ⓐ, ABß\n"
+  },
+  {
+   "name": "tabs widen the line",
+   "input": "def f():\n\tfrom x import b, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n\tfrom y import b, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n",
+   "output": "def f():\n\tfrom x import (\n\t\taaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,\n\t\tb,\n\t)\n\tfrom y import aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, b\n"
+  },
+  {
+   "name": "wide characters widen the line",
+   "input": "from x import b, 漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢\nfrom y import b, 漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢\n",
+   "output": "from x import (\n    b,\n    漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢,\n)\nfrom y import b, 漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢漢\n"
+  },
+  {
    "name": "combining marks in names",
    "input": "from x import é, a\nimport b́\nimport a\n",
    "output": "import a\nimport b́\nfrom x import a, é\n"
