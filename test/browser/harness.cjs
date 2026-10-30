@@ -17,7 +17,7 @@ const oracle = require("../oracle.json");
 function serve() {
   const server = http.createServer((req, res) => {
     const file = path.join(PAGES, path.normalize(new URL(req.url, "http://x").pathname));
-    if (!file.startsWith(PAGES) || !fs.existsSync(file)) return res.writeHead(404).end();
+    if (!file.startsWith(PAGES) || !fs.statSync(file, { throwIfNoEntry: false })?.isFile()) return res.writeHead(404).end();
     res.setHeader("content-type", file.endsWith(".js") ? "text/javascript" : "text/html");
     fs.createReadStream(file).pipe(res);
   });

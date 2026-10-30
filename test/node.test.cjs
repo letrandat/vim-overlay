@@ -91,6 +91,37 @@ function run(box, file) {
 }
 
 {
+  // The content script gets the popup's settings from the bridge through DOM events: at once when
+  // the bridge has read them, after an empty answer while it still reads them, and as the defaults
+  // when there is no bridge. pick keeps the features the settings leave on, in order.
+  const { box } = newSandbox();
+  box.document = new EventTarget();
+  box.CustomEvent = CustomEvent;
+  const got = [];
+  // JSON copies, since objects from the sandbox have its own prototypes.
+  const ask = () => run(box, "src/settings.ts").whenSettings((s) => got.push(JSON.parse(JSON.stringify(s))));
+  ask();
+  assert.deepStrictEqual(got, [{ on: true, off: [] }], "no bridge: every feature, at once");
+
+  // A thenable rather than a Promise, so the read finishes when the test says, without a tick.
+  let read;
+  box.chrome = { storage: { sync: { get: () => ({ then: (done) => (read = done) }) } } };
+  run(box, "src/bridge.ts");
+  got.length = 0;
+  ask();
+  assert.deepStrictEqual(got, [], "the bridge still reading: wait");
+  read({ on: true, off: ["clipboard"] });
+  assert.deepStrictEqual(got, [{ on: true, off: ["clipboard"] }], "the bridge's answer once it has read");
+  ask();
+  assert.strictEqual(got.length, 2, "a second copy is answered at once");
+  const { pick } = run(box, "src/settings.ts");
+  const all = { a: 1, b: 2, c: 3 };
+  assert.deepStrictEqual(Object.keys(pick(all, { on: true, off: ["b", "gone"] })), ["a", "c"], "off features dropped, order kept");
+  assert.strictEqual(Object.keys(pick(all, { on: false, off: [] })).length, 0, "master switch off: none");
+  console.log("ok  settings: bridge answers now, later or never; pick drops off features");
+}
+
+{
   // The webpack host with webpack 5's runtime finds Vim in a module the page has run, and runs no
   // page code for it: not a module the page has not run, nor a re-export's or a global's getter.
   // A Proxy export whose ownKeys trap throws does not stop it, nor does a page global that shares
