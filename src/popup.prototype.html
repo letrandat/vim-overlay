@@ -1,0 +1,358 @@
+<!doctype html>
+<!--
+  PROTOTYPE, throwaway. Not part of the extension build.
+  Question: what should "turn vim-overlay off" look like?
+  Four variants of the extension's toolbar control, switchable via ?variant=A|B|C|D,
+  on a mock browser showing a page the extension runs on.
+  Constraint every variant has to show: features change vim.js in place, so turning one ON
+  can apply live (the runtime scans each second), but turning one OFF needs a page reload.
+  Run: open src/popup.prototype.html
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PROTOTYPE · vim-overlay off switch</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 13px/1.4 system-ui, -apple-system, sans-serif; background: #e9e9ee; color: #1f2328; }
+  .stage { display: flex; gap: 20px; padding: 20px 20px 90px; align-items: flex-start; }
+
+  /* Mock browser */
+  .browser { flex: 1; min-width: 640px; background: #fff; border-radius: 10px; box-shadow: 0 6px 24px #0002; overflow: visible; position: relative; }
+  .tabs { background: #dfe1e5; border-radius: 10px 10px 0 0; padding: 8px 10px 0; display: flex; }
+  .tab { background: #fff; border-radius: 8px 8px 0 0; padding: 6px 14px; font-size: 12px; }
+  .toolbar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid #ddd; position: relative; }
+  .omni { flex: 1; background: #f1f3f4; border-radius: 14px; padding: 5px 12px; color: #444; }
+  .ext { position: relative; width: 28px; height: 28px; border-radius: 6px; border: 0; background: transparent; cursor: pointer; display: grid; place-items: center; }
+  .ext:hover { background: #eee; }
+  .ext .logo { width: 18px; height: 18px; border-radius: 4px; background: #1a7f37; color: #fff; font: 700 11px/18px ui-monospace, monospace; text-align: center; }
+  .ext.dim .logo { background: #8c959f; }
+  .badge { position: absolute; right: -4px; bottom: -3px; background: #cf222e; color: #fff; font: 700 9px/1 system-ui; padding: 2px 3px; border-radius: 3px; }
+  .badge.wait { background: #9a6700; }
+
+  /* Mock page */
+  .page { height: 460px; display: flex; flex-direction: column; }
+  .editor { flex: 1; background: #1e1e1e; color: #d4d4d4; font: 13px/20px ui-monospace, Menlo, monospace; padding: 10px 0; overflow: hidden; display: flex; }
+  .gutter { color: #858585; text-align: right; padding: 0 10px; user-select: none; }
+  .rnu { color: #c5a500; text-align: right; padding-right: 10px; }
+  .code { white-space: pre; }
+  .code .cur { background: #aeafad; color: #000; }
+  .kw { color: #569cd6; } .fn { color: #dcdcaa; } .st { color: #ce9178; } .cm { color: #6a9955; }
+  .status { background: #007acc; color: #fff; font: 12px/22px ui-monospace, monospace; padding: 0 10px; display: flex; gap: 16px; }
+  .status .ov { margin-left: auto; opacity: .95; }
+  .status input { flex: 1; background: transparent; border: 0; color: #fff; font: inherit; outline: none; }
+  .status input::placeholder { color: #ffffffa0; }
+  .plain { padding: 24px 32px; color: #444; }
+  .plain h2 { margin-top: 0; }
+
+  /* The popup: the thing being designed */
+  .popup { position: absolute; top: 40px; right: 6px; width: 320px; background: #fff; border-radius: 8px; box-shadow: 0 8px 28px #0004; z-index: 5; overflow: hidden; }
+  .popup header { padding: 12px 14px; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 8px; }
+  .popup header .logo { width: 20px; height: 20px; border-radius: 4px; background: #1a7f37; color: #fff; font: 700 12px/20px ui-monospace, monospace; text-align: center; }
+  .popup .sub { color: #656d76; font-size: 12px; }
+  .row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; }
+  .row .grow { flex: 1; }
+  .switch { position: relative; width: 36px; height: 20px; border-radius: 10px; background: #8c959f; border: 0; cursor: pointer; flex: none; }
+  .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: left .12s; }
+  .switch.on { background: #1a7f37; }
+  .switch.on::after { left: 18px; }
+  .switch.big { width: 64px; height: 34px; border-radius: 17px; }
+  .switch.big::after { width: 28px; height: 28px; top: 3px; left: 3px; }
+  .switch.big.on::after { left: 33px; }
+  .reload { background: #fff8c5; border-top: 1px solid #d4a72c55; padding: 10px 14px; display: flex; gap: 10px; align-items: center; font-size: 12px; }
+  .reload button, .btn { border: 1px solid #d0d7de; background: #f6f8fa; border-radius: 6px; padding: 4px 10px; cursor: pointer; font: inherit; }
+  .reload button { margin-left: auto; background: #1f2328; color: #fff; border-color: #1f2328; }
+  .list { margin: 0; padding: 0 14px 10px; list-style: none; }
+  .list li { display: flex; align-items: center; padding: 4px 0; border-bottom: 1px solid #f0f0f0; }
+  .list li span { flex: 1; }
+  .x { border: 0; background: none; cursor: pointer; color: #656d76; font-size: 14px; }
+  .group { padding: 6px 14px 2px; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #656d76; }
+  .feat { display: flex; align-items: center; gap: 8px; padding: 3px 14px; cursor: pointer; }
+  .feat:hover { background: #f6f8fa; }
+  .feat kbd { margin-left: auto; font: 11px ui-monospace, monospace; color: #656d76; }
+  .feat.off { color: #8c959f; }
+  .feat.pending { color: #9a6700; }
+  .scroll { max-height: 300px; overflow: auto; }
+  .muted { opacity: .45; pointer-events: none; }
+  .toast { position: absolute; top: 40px; right: 6px; background: #1f2328; color: #fff; border-radius: 8px; padding: 10px 12px; width: 300px; z-index: 5; box-shadow: 0 8px 28px #0004; font-size: 12px; }
+  .toast b { display: block; font-size: 13px; margin-bottom: 4px; }
+  .toast button { margin-top: 8px; border: 0; border-radius: 6px; padding: 4px 10px; background: #fff; color: #1f2328; cursor: pointer; font: inherit; }
+  .hint { position: absolute; top: 44px; right: 46px; background: #ddf4ff; border: 1px dashed #54aeff; border-radius: 6px; padding: 6px 8px; font-size: 12px; width: 230px; }
+
+  /* Prototype controls: deliberately unlike the design */
+  .proto { width: 340px; flex: none; background: #fffbe6; border: 2px dashed #bf8700; border-radius: 8px; padding: 12px; font-size: 12px; }
+  .proto h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: #9a6700; }
+  .proto pre { background: #fff; border: 1px solid #eee; padding: 8px; margin: 8px 0 0; font: 11px/1.45 ui-monospace, monospace; white-space: pre-wrap; }
+  .proto p { margin: 6px 0; }
+  .proto select { font: inherit; }
+
+  .switcher { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 4px; background: #111; color: #fff; border-radius: 999px; padding: 6px; box-shadow: 0 6px 20px #0006; font: 600 13px system-ui; z-index: 10; }
+  .switcher button { background: #333; color: #fff; border: 0; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 15px; }
+  .switcher span { padding: 0 14px; min-width: 260px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="browser" id="browser"></div>
+  <aside class="proto">
+    <h3>Prototype controls (not the design)</h3>
+    <p>Page: <select id="site"></select></p>
+    <p id="about"></p>
+    <pre id="state"></pre>
+  </aside>
+</div>
+<div class="switcher">
+  <button data-cycle="-1" title="Previous (←)">←</button>
+  <span id="label"></span>
+  <button data-cycle="1" title="Next (→)">→</button>
+</div>
+
+<script>
+const FEATURES = [
+  ["Text objects", [["indent-object", "ii ai"], ["entire-object", "ae"], ["bracket-objects", "i( a{"], ["quote-object", "iq aq"]]],
+  ["Yank", [["yank-to-eol", "Y"], ["clipboard", "yank"], ["yank-flash", "yank"]]],
+  ["Editing", [["complete", "C-n C-p"], ["move-lines", "C-j C-k"], ["comment", "gc"], ["toggle-boolean", "C-a C-x"], ["change-list", "g;"]]],
+  ["Code tools", [["relative-numbers", ":set rnu"], ["rename", "grn"], ["hover", "gh"], ["organize-imports", "S-A-O"]]],
+];
+const ALL = FEATURES.flatMap(([, fs]) => fs.map(([n]) => n));
+const SITES = {
+  "leetcode.com": { host: "monaco-vim", tab: "Two Sum - LeetCode" },
+  "app.coderpad.io": { host: "webpack (monaco-vim)", tab: "CoderPad sandbox" },
+  "github.com": { host: null, tab: "letrandat/vim-overlay" },
+};
+
+const VARIANTS = {
+  A: { name: "Kill switch", about: "One global switch in a popup. Off means off everywhere. The badge says OFF on every tab." },
+  B: { name: "This site", about: "The popup is about the current site: run here or not. Sites you turned off are listed below it. No global switch." },
+  C: { name: "Per feature", about: "A master switch plus a checklist of the 16 features, so you can turn off just the one in your way (say, C-j on a site that binds it). Settings are global." },
+  D: { name: "No popup", about: "Clicking the icon toggles the current site at once; a toast confirms. Inside the editor, :overlay off / on / ? does the same without the mouse." },
+};
+
+// All state lives here, in memory. Reload resets it (except ?variant=).
+const S = {
+  variant: new URLSearchParams(location.search).get("variant") || "A",
+  site: "leetcode.com",
+  globalOn: true,
+  offSites: [],
+  offFeatures: [],
+  running: {},     // per site: features the page has installed right now
+  popupOpen: true,
+  toast: null,
+  cmd: "",
+  msg: "",
+};
+if (!VARIANTS[S.variant]) S.variant = "A";
+
+// What the settings say the page should run.
+function wanted(site) {
+  if (!SITES[site].host) return [];
+  if (!S.globalOn || S.offSites.includes(site)) return [];
+  return ALL.filter(f => !S.offFeatures.includes(f));
+}
+function running(site) {
+  if (!(site in S.running)) S.running[site] = wanted(site);
+  return S.running[site];
+}
+// The runtime scans each second, so a newly wanted feature installs live; an unwanted one stays until reload.
+function settle() {
+  for (const site of Object.keys(SITES)) {
+    const r = running(site), w = wanted(site);
+    S.running[site] = [...r, ...w.filter(f => !r.includes(f))];
+  }
+}
+const stale = site => running(site).filter(f => !wanted(site).includes(f));
+const siteOn = site => S.globalOn && !S.offSites.includes(site);
+function reloadPage() { S.running[S.site] = wanted(S.site); S.toast = null; S.msg = "page reloaded"; }
+
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const sw = (on, action, big) => `<button class="switch ${on ? "on" : ""} ${big ? "big" : ""}" data-action="${action}" aria-pressed="${on}"></button>`;
+function reloadBar() {
+  const n = stale(S.site).length;
+  if (!n) return "";
+  return `<div class="reload">${n === ALL.length || !wanted(S.site).length ? "Still running on this page." : `${n} feature${n > 1 ? "s" : ""} still running on this page.`} <button data-action="reload">Reload page</button></div>`;
+}
+function badge() {
+  if (stale(S.site).length && !wanted(S.site).length) return `<span class="badge wait">⟳</span>`;
+  if (!siteOn(S.site)) return `<span class="badge">OFF</span>`;
+  if (S.offFeatures.length) return `<span class="badge">${ALL.length - S.offFeatures.length}</span>`;
+  return "";
+}
+function head(sub) {
+  return `<header><div class="logo">V</div><div class="grow"><b>vim-overlay</b><div class="sub">${sub}</div></div></header>`;
+}
+function detected() {
+  const h = SITES[S.site].host;
+  return h ? `${S.site} · found ${h}` : `${S.site} · no Vim editor on this page`;
+}
+
+const POPUPS = {
+  A: () => `<div class="popup">
+      ${head(detected())}
+      <div class="row" style="padding:22px 14px">
+        <div class="grow"><div style="font-size:16px;font-weight:600">${S.globalOn ? "On" : "Off"}</div>
+        <div class="sub">${S.globalOn ? "Adding Vim features on every site." : "Off on every site until you turn it back on."}</div></div>
+        ${sw(S.globalOn, "global", true)}
+      </div>
+      ${reloadBar()}
+    </div>`,
+
+  B: () => {
+    const on = !S.offSites.includes(S.site);
+    const others = S.offSites.filter(s => s !== S.site);
+    return `<div class="popup">
+      ${head(SITES[S.site].host ? `found ${SITES[S.site].host}` : "no Vim editor on this page")}
+      <div class="row" style="padding:16px 14px">
+        <div class="grow"><div style="font-size:15px;font-weight:600">${esc(S.site)}</div>
+        <div class="sub">${on ? "Runs on this site" : "Turned off on this site"}</div></div>
+        ${sw(on, "site")}
+      </div>
+      ${reloadBar()}
+      ${S.offSites.length ? `<div class="group">Off on ${S.offSites.length} site${S.offSites.length > 1 ? "s" : ""}</div>
+        <ul class="list">${S.offSites.map(s => `<li><span>${esc(s)}${s === S.site ? " (this one)" : ""}</span><button class="x" data-action="unsite" data-site="${esc(s)}" title="Turn back on">×</button></li>`).join("")}</ul>` : `<div class="sub" style="padding:0 14px 12px">Runs everywhere. Turn it off here to add this site to a list.</div>`}
+    </div>`;
+  },
+
+  C: () => {
+    const r = running(S.site);
+    return `<div class="popup">
+      ${head(detected())}
+      <div class="row"><b class="grow">All features</b>${sw(S.globalOn, "global")}</div>
+      ${reloadBar()}
+      <div class="scroll ${S.globalOn ? "" : "muted"}">
+        ${FEATURES.map(([g, fs]) => `<div class="group">${g}</div>` + fs.map(([n, k]) => {
+          const on = !S.offFeatures.includes(n), pending = !on && r.includes(n) && SITES[S.site].host;
+          return `<label class="feat ${on ? "" : "off"} ${pending ? "pending" : ""}"><input type="checkbox" data-action="feat" data-f="${n}" ${on ? "checked" : ""}> ${n}${pending ? " ⟳" : ""}<kbd>${esc(k)}</kbd></label>`;
+        }).join("")).join("")}
+      </div>
+      <div class="row sub" style="border-top:1px solid #eee"><span class="grow">${ALL.length - S.offFeatures.length} of ${ALL.length} on</span>${S.offFeatures.length ? `<button class="btn" data-action="allon">Turn all on</button>` : ""}</div>
+    </div>`;
+  },
+
+  D: () => "",
+};
+
+function toggleSite() {
+  const i = S.offSites.indexOf(S.site);
+  if (i >= 0) S.offSites.splice(i, 1); else S.offSites.push(S.site);
+  settle();
+}
+
+function editor() {
+  const site = SITES[S.site];
+  if (!site.host) return `<div class="plain"><h2>letrandat/vim-overlay</h2><p>A browser extension that adds missing Vim features to the Vim mode a page's code editor already runs.</p><p>(No code editor here, so there is nothing for vim-overlay to do.)</p></div>`;
+  const r = running(S.site);
+  const rnu = r.includes("relative-numbers");
+  const lines = [
+    `<span class="kw">class</span> <span class="fn">Solution</span>:`,
+    `    <span class="kw">def</span> <span class="fn">twoSum</span>(self, nums, target):`,
+    `        seen = {}  <span class="cm"># value -> index</span>`,
+    `        <span class="kw">for</span> i, n <span class="kw">in</span> <span class="fn">enumerate</span>(nums):`,
+    `            <span class="kw">if</span> target - n <span class="kw">in</span> seen:`,
+    `                <span class="kw">return</span> [seen[target - n], i]`,
+    `            seen[n] = i`,
+    `        <span class="kw">return</span> []`,
+  ];
+  const cur = 3;
+  const ov = !r.length ? "vim-overlay off"
+    : !wanted(S.site).length ? "vim-overlay: off after reload"
+    : stale(S.site).length ? `vim-overlay: ${r.length} running, ${stale(S.site).length} off after reload`
+    : `vim-overlay: ${r.length} features`;
+  const cmdline = S.variant === "D"
+    ? `<input id="cmd" placeholder=":overlay off  ·  :overlay on  ·  :overlay?" value="${esc(S.cmd)}">`
+    : `<span>-- NORMAL --</span>`;
+  return `<div class="editor">
+      <div class="gutter">${lines.map((_, i) => i + 1).join("<br>")}</div>
+      ${rnu ? `<div class="rnu">${lines.map((_, i) => Math.abs(i - cur) || i + 1).join("<br>")}</div>` : ""}
+      <div class="code">${lines.map((l, i) => i === cur ? l.replace("for", `<span class="cur">f</span><span class="kw">or</span>`) : l).join("\n")}</div>
+    </div>
+    <div class="status">${cmdline}${S.msg ? `<span>${esc(S.msg)}</span>` : ""}<span class="ov">${ov}</span></div>`;
+}
+
+function render() {
+  const v = S.variant, site = SITES[S.site];
+  const dim = !wanted(S.site).length && site.host;
+  let overlay = "";
+  if (v === "D") {
+    if (S.toast) overlay = `<div class="toast"><b>${esc(S.toast)}</b>${stale(S.site).length ? "Features stay until the page reloads." : ""}${stale(S.site).length ? `<br><button data-action="reload">Reload page</button>` : ""}</div>`;
+    else overlay = `<div class="hint">Variant D: click the V icon to toggle this site. Or type in the editor's command line.</div>`;
+  } else if (S.popupOpen) overlay = POPUPS[v]();
+
+  document.getElementById("browser").innerHTML = `
+    <div class="tabs"><div class="tab">${esc(site.tab)}</div></div>
+    <div class="toolbar">
+      <div class="omni">https://${esc(S.site)}/</div>
+      <button class="ext ${dim ? "dim" : ""}" data-action="icon" title="vim-overlay"><div class="logo">V</div>${badge()}</button>
+      ${overlay}
+    </div>
+    <div class="page">${editor()}</div>`;
+  document.getElementById("label").textContent = `${v} (${VARIANTS[v].name})`;
+  document.getElementById("about").textContent = VARIANTS[v].about;
+  document.getElementById("state").textContent = JSON.stringify({
+    settings: { globalOn: S.globalOn, offSites: S.offSites, offFeatures: S.offFeatures },
+    page: { site: S.site, host: site.host, wanted: wanted(S.site).length, running: running(S.site).length, offAfterReload: stale(S.site) },
+  }, null, 2);
+  const cmd = document.getElementById("cmd");
+  if (cmd && S.focusCmd) { cmd.focus(); cmd.setSelectionRange(cmd.value.length, cmd.value.length); }
+}
+
+document.addEventListener("click", e => {
+  const c = e.target.closest("[data-cycle]");
+  if (c) return cycle(+c.dataset.cycle);
+  const a = e.target.closest("[data-action]");
+  if (!a) { if (!e.target.closest(".popup") && S.variant !== "D" && S.popupOpen) { S.popupOpen = false; render(); } return; }
+  const act = a.dataset.action;
+  S.msg = "";
+  if (act === "icon") {
+    if (S.variant === "D") {
+      toggleSite();
+      const on = !S.offSites.includes(S.site);
+      S.toast = `vim-overlay ${on ? "on" : "off"} on ${S.site}`;
+    } else S.popupOpen = !S.popupOpen;
+  }
+  if (act === "global") { S.globalOn = !S.globalOn; settle(); }
+  if (act === "site") toggleSite();
+  if (act === "unsite") { S.offSites = S.offSites.filter(s => s !== a.dataset.site); settle(); }
+  if (act === "allon") { S.offFeatures = []; settle(); }
+  if (act === "reload") reloadPage();
+  if (act === "feat") return;
+  render();
+});
+document.addEventListener("change", e => {
+  const a = e.target.closest("[data-action=feat]");
+  if (a) {
+    const f = a.dataset.f;
+    S.offFeatures = a.checked ? S.offFeatures.filter(x => x !== f) : [...S.offFeatures, f];
+    settle(); render();
+  }
+  if (e.target.id === "site") { S.site = e.target.value; S.toast = null; S.msg = ""; render(); }
+});
+document.addEventListener("input", e => { if (e.target.id === "cmd") S.cmd = e.target.value; });
+document.addEventListener("keydown", e => {
+  if (e.target.id === "cmd" && e.key === "Enter") {
+    const c = S.cmd.trim().replace(/^:/, "");
+    const on = !S.offSites.includes(S.site);
+    if (c === "overlay off") { if (on) toggleSite(); S.msg = stale(S.site).length ? "off for this site; reload to finish" : "off for this site"; }
+    else if (c === "overlay on") { if (!on) toggleSite(); S.msg = "on for this site"; }
+    else if (c === "overlay?" || c === "overlay") S.msg = `overlay=${on ? "on" : "off"} (${running(S.site).length} running)`;
+    else S.msg = `E492: Not an editor command: ${c}`;
+    S.cmd = ""; S.focusCmd = true; render(); S.focusCmd = false;
+    return;
+  }
+  if (e.target.matches("input, textarea, select, [contenteditable]")) return;
+  if (e.key === "ArrowLeft") cycle(-1);
+  if (e.key === "ArrowRight") cycle(1);
+});
+function cycle(d) {
+  const keys = Object.keys(VARIANTS);
+  S.variant = keys[(keys.indexOf(S.variant) + d + keys.length) % keys.length];
+  S.popupOpen = true; S.toast = null; S.msg = "";
+  const u = new URL(location.href); u.searchParams.set("variant", S.variant); history.replaceState(null, "", u);
+  render();
+}
+
+const sel = document.getElementById("site");
+sel.innerHTML = Object.keys(SITES).map(s => `<option>${s}</option>`).join("");
+render();
+</script>
+</body>
+</html>
