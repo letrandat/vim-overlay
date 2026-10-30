@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  :root { color-scheme: light dark; --muted: light-dark(#656d76, #9198a1); --line: light-dark(#eaeef2, #30363d); --on: #1a7f37; }
+  body { margin: 0; width: 300px; font: 13px/1.4 system-ui, sans-serif; }
+  header { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  .logo { width: 20px; height: 20px; border-radius: 4px; background: var(--on); color: #fff; font: 700 12px/20px ui-monospace, monospace; text-align: center; }
+  .row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; }
+  .grow { flex: 1; }
+  .switch { appearance: none; position: relative; width: 36px; height: 20px; margin: 0; border-radius: 10px; background: #8c959f; cursor: pointer; }
+  .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: left 0.12s; }
+  .switch:checked { background: var(--on); }
+  .switch:checked::after { left: 18px; }
+  #reload { display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: light-dark(#fff8c5, #3b2e00); font-size: 12px; }
+  #reload[hidden] { display: none; }
+  button { font: inherit; border-radius: 6px; padding: 4px 10px; cursor: pointer; border: 1px solid light-dark(#d0d7de, #3d444d); background: light-dark(#f6f8fa, #212830); color: inherit; }
+  #features { border-top: 1px solid var(--line); padding: 4px 0; }
+  #features.off { opacity: 0.45; }
+  label { display: flex; align-items: center; gap: 8px; padding: 3px 14px; cursor: pointer; }
+  label:hover { background: light-dark(#f6f8fa, #212830); }
+  kbd { margin-left: auto; font: 11px ui-monospace, monospace; color: var(--muted); }
+  #footer { color: var(--muted); border-top: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<header><div class="logo">V</div><b>vim-overlay</b></header>
+<label class="row"><b class="grow">All features</b><input type="checkbox" class="switch" id="on"></label>
+<div id="reload" hidden><span class="grow">Reload the page to apply.</span><button id="reload-page">Reload page</button></div>
+<div id="features"></div>
+<div class="row" id="footer"><span class="grow" id="count"></span><button id="all-on">Turn all on</button></div>
+<script src="popup.js"></script>
+</body>
+</html>

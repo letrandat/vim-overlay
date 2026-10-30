@@ -48,11 +48,17 @@ This writes the extension to `dist/`.
 - Chrome or Edge: open `chrome://extensions`, turn on Developer mode, click **Load unpacked**, and select the `dist` folder.
 - Firefox 128 or later: open `about:debugging`, click **This Firefox**, click **Load Temporary Add-on**, and select `dist/manifest.json`.
 
-After changing a file, run `npm run build` again (or keep `npm run watch` running), reload the extension, then refresh the page. `npm run watch` rebuilds the script but not the manifest.
+After changing a file, run `npm run build` again (or keep `npm run watch` running), reload the extension, then refresh the page. `npm run watch` rebuilds the scripts but not the manifest or the popup's page.
+
+## Turn features off
+
+Click the extension's toolbar icon. **All features** turns the extension off on every site; each checkbox below it turns one feature off on every site. A page reads the settings when it loads, so a change applies after a reload, and the popup offers a **Reload page** button. The settings are kept in the browser's extension storage, synced where the browser syncs extensions.
+
+The content script runs in the page's world, where extension storage is out of reach, so a second script, `bridge.js`, reads the settings in the extension's own world and hands them over with DOM events. A page could send those events too and turn features off for itself.
 
 ## Add or remove a feature
 
-Add one module to `src/features/` that exports `install`, and list it in `features` in `src/registry.ts`. Its browser scenarios go in `test/browser/features/<name>.cjs`, listed in `FEATURES` in `test/browser.test.cjs`. To remove a feature, delete its files and lines.
+Add one module to `src/features/` that exports `install`, list it in `features` in `src/registry.ts`, and give its keys in `src/popup/features.ts`, which the type check holds to the registry. Its browser scenarios go in `test/browser/features/<name>.cjs`, listed in `FEATURES` in `test/browser.test.cjs`. To remove a feature, delete its files and lines.
 
 ```ts
 // src/features/my-feature.ts
@@ -84,8 +90,11 @@ export const find = () =>
 
 ```text
 manifest.json          the extension's manifest; the build copies it to dist/
-scripts/build.mjs      bundles src/content.ts into dist/content.js with esbuild
-src/content.ts         the content script: starts the runtime with every host and feature
+scripts/build.mjs      bundles the content script, the bridge and the popup into dist/ with esbuild
+src/content.ts         the content script: starts the runtime with every host and the features left on
+src/bridge.ts          reads the popup's settings in the extension's world and hands them to the content script
+src/settings.ts        the settings, the handshake between the two scripts, and the filter on features
+src/popup/             the toolbar popup: its page, its script, and each feature's keys
 src/registry.ts        every host and feature, by name
 src/runtime.ts         asks the hosts for Vim objects once a second and installs the features on each
 src/vim-api.ts         the Vim API and adapter types used by the extension
@@ -99,12 +108,12 @@ test/                  see Tests
 ## Tests
 
 ```sh
-npm install && npx playwright install webkit && npm test
+npm install && npx playwright install webkit chromium && npm test
 ```
 
 `npm run typecheck` checks the source with strict TypeScript and emits nothing; esbuild writes the bundle. Source imports use explicit `.ts` extensions, supported by both tools. `src/vim-api.ts` owns the narrow types for the Vim API and the adapters each host supplies.
 
-`npm test` type-checks, builds, then runs both suites. `test/node.test.cjs` bundles the runtime, the webpack host and the indent object as the build does, runs them in a `vm` sandbox, and runs the indent range logic against `oracle.json`, which real Vim recorded with the original plugin (`npm run oracle` regenerates it). It also checks the Python import sorter against `imports-oracle.json`, which ruff recorded from `imports-cases.cjs` (`npm run imports-oracle` regenerates it; it needs ruff on the path). `test/browser.test.cjs` loads each host page in WebKit with editors from jsDelivr, injects the built content script, types real keys, and compares built-in commands with a page that has no extension. `test/browser/harness.cjs` opens pages and plays keys, and each file in `test/browser/features/` holds one feature's scenarios and any checks it runs before or after them. It needs network access. Run one host with `node test/browser.test.cjs codemirror5`, or another browser with `BROWSER=chromium`.
+`npm test` type-checks, builds, then runs both suites. `test/node.test.cjs` bundles the runtime, the webpack host and the indent object as the build does, runs them in a `vm` sandbox, and runs the indent range logic against `oracle.json`, which real Vim recorded with the original plugin (`npm run oracle` regenerates it). It also checks the handshake between the bridge and the content script, and the Python import sorter against `imports-oracle.json`, which ruff recorded from `imports-cases.cjs` (`npm run imports-oracle` regenerates it; it needs ruff on the path). `test/extension.test.cjs` loads `dist/` into Chromium as an unpacked extension, changes the settings in the popup's own page, and checks after each reload that a test page installs every feature, every feature but one, and none. `test/browser.test.cjs` loads each host page in WebKit with editors from jsDelivr, injects the built content script, types real keys, and compares built-in commands with a page that has no extension. `test/browser/harness.cjs` opens pages and plays keys, and each file in `test/browser/features/` holds one feature's scenarios and any checks it runs before or after them. It needs network access. Run one host with `node test/browser.test.cjs codemirror5`, or another browser with `BROWSER=chromium`.
 
 ## Credits and licence
 
