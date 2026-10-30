@@ -39,7 +39,7 @@ $("features").append(
   })
 );
 $("on").addEventListener("change", () => save({ ...settings, on: $<HTMLInputElement>("on").checked }));
-$("all-on").addEventListener("click", () => save({ ...settings, off: [] }));
+$("all-on").addEventListener("click", () => save({ on: true, off: [] }));
 $("reload-page").addEventListener("click", () => chrome.tabs.reload().then(() => close()));
 
 chrome.storage.sync.get(DEFAULTS).then((stored) => {

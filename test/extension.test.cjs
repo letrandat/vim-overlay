@@ -63,8 +63,9 @@ const ALL = { defineMotion: 5, defineAction: 5, defineOperator: 1, mapCommand: 2
     assert.ok(Object.values(none).every((n) => n === 0), JSON.stringify(none));
 
     await openPopup();
-    await popup.check("#on");
+    // With the master switch off and move-lines off, "Turn all on" turns both back on.
     await popup.click("#all-on");
+    assert.strictEqual(await popup.isChecked("#on"), true, "Turn all on turns the master switch on");
     assert.deepStrictEqual(await load(), ALL, "turned back on, every feature runs again");
     console.log("ok  extension: the popup turns every feature, one feature and all of them off and on after a reload");
   } finally {

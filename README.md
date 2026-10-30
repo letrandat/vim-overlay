@@ -54,7 +54,7 @@ After changing a file, run `npm run build` again (or keep `npm run watch` runnin
 
 Click the extension's toolbar icon. **All features** turns the extension off on every site; each checkbox below it turns one feature off on every site. A page reads the settings when it loads, so a change applies after a reload, and the popup offers a **Reload page** button. The settings are kept in the browser's extension storage, synced where the browser syncs extensions.
 
-The content script runs in the page's world, where extension storage is out of reach, so a second script, `bridge.js`, reads the settings in the extension's own world and hands them over with DOM events. A page could send those events too and turn features off for itself.
+The content script runs in the page's world, where extension storage is out of reach, so a second script, `bridge.js`, reads the settings in the extension's own world and hands them over with DOM events. A page could send those events too, read the settings, and turn features off or on for itself.
 
 ## Add or remove a feature
 
