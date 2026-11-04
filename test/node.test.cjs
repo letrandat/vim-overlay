@@ -101,24 +101,50 @@ function run(box, file) {
   // JSON copies, since objects from the sandbox have its own prototypes.
   const ask = () => run(box, "src/settings.ts").whenSettings((s) => got.push(JSON.parse(JSON.stringify(s))));
   ask();
-  assert.deepStrictEqual(got, [{ on: true, off: [] }], "no bridge: every feature, at once");
+  assert.deepStrictEqual(got, [{ on: true, off: [], relativeNumbers: false }], "no bridge: the defaults, at once");
 
   // A thenable rather than a Promise, so the read finishes when the test says, without a tick.
   let read;
-  box.chrome = { storage: { sync: { get: () => ({ then: (done) => (read = done) }) } } };
+  let reads = 0;
+  let changed;
+  box.chrome = {
+    storage: {
+      sync: { get: () => ({ then: (done) => ((read = done), reads++) }) },
+      onChanged: { addListener: (listener) => (changed = listener) },
+    },
+  };
   run(box, "src/bridge.ts");
   got.length = 0;
   ask();
   assert.deepStrictEqual(got, [], "the bridge still reading: wait");
-  read({ on: true, off: ["clipboard"] });
-  assert.deepStrictEqual(got, [{ on: true, off: ["clipboard"] }], "the bridge's answer once it has read");
+  read({ on: true, off: ["clipboard"], relativeNumbers: false });
+  assert.deepStrictEqual(got, [{ on: true, off: ["clipboard"], relativeNumbers: false }], "the bridge's answer once it has read");
   ask();
   assert.strictEqual(got.length, 2, "a second copy is answered at once");
+
+  // A change in storage reaches the content script's watchers with the settings read again;
+  // the first answer is not repeated, and an event a page sends with bad settings is ignored.
+  const settings = run(box, "src/settings.ts");
+  const seen = [];
+  settings.whenSettings(() => {});
+  settings.watchSettings((s) => seen.push(JSON.parse(JSON.stringify(s))));
+  const before = reads;
+  changed({}, "local");
+  assert.strictEqual(reads, before, "a change outside sync storage is not read");
+  changed({}, "sync");
+  read({ on: true, off: ["comment"], relativeNumbers: true });
+  assert.deepStrictEqual(seen, [{ on: true, off: ["comment"], relativeNumbers: true }], "a sync change reaches the watchers");
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(settings.currentSettings())), { on: true, off: ["comment"], relativeNumbers: true }, "and becomes the current settings");
+  box.document.dispatchEvent(new CustomEvent("vim-overlay:change", { detail: "{bad" }));
+  box.document.dispatchEvent(new CustomEvent("vim-overlay:change", { detail: '{"on":1}' }));
+  box.document.dispatchEvent(new CustomEvent("vim-overlay:change", { detail: '{"on":true,"off":[]}' }));
+  assert.strictEqual(seen.length, 1, "bad settings are ignored");
+
   const { pick } = run(box, "src/settings.ts");
-  const all = { a: 1, b: 2, c: 3 };
-  assert.deepStrictEqual(Object.keys(pick(all, { on: true, off: ["b", "gone"] })), ["a", "c"], "off features dropped, order kept");
-  assert.strictEqual(Object.keys(pick(all, { on: false, off: [] })).length, 0, "master switch off: none");
-  console.log("ok  settings: bridge answers now, later or never; pick drops off features");
+  const all = { a: 1, b: 2, c: 3, "relative-numbers": 4 };
+  assert.deepStrictEqual(Object.keys(pick(all, { on: true, off: ["b", "gone", "relative-numbers"], relativeNumbers: false })), ["a", "c", "relative-numbers"], "off features dropped, order kept, a feature with its own row kept");
+  assert.strictEqual(Object.keys(pick(all, { on: false, off: [], relativeNumbers: true })).length, 0, "master switch off: none");
+  console.log("ok  settings: bridge answers now, later or never, then passes on changes; pick drops off features");
 }
 
 {

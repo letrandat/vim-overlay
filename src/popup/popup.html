@@ -18,7 +18,8 @@
   #reload[hidden] { display: none; }
   button { font: inherit; border-radius: 6px; padding: 4px 10px; cursor: pointer; border: 1px solid var(--edge); background: var(--hover); color: inherit; }
   #features { border-top: 1px solid var(--line); padding: 4px 0; }
-  #features.off { opacity: 0.45; }
+  #features.off, #numbers.off { opacity: 0.45; }
+  #numbers { border-top: 1px solid var(--line); }
   label { display: flex; align-items: center; gap: 8px; padding: 3px 14px; cursor: pointer; }
   label:hover { background: var(--hover); }
   kbd { margin-left: auto; font: 11px ui-monospace, monospace; color: var(--muted); }
@@ -29,6 +30,7 @@
 <header><div class="logo">V</div><b>vim-overlay</b></header>
 <label class="row"><b class="grow">All features</b><input type="checkbox" class="switch" id="on"></label>
 <div id="reload" hidden><span class="grow">Reload the page to apply.</span><button id="reload-page">Reload page</button></div>
+<label class="row" id="numbers"><input type="checkbox" id="rnu"><span class="grow">Relative line numbers</span><kbd>:set rnu</kbd></label>
 <div id="features"></div>
 <div class="row" id="footer"><span class="grow" id="count"></span><button id="all-on">Turn all on</button></div>
 <script src="popup.js"></script>
