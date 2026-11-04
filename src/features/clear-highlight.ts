@@ -23,10 +23,18 @@ export const install = (Vim: VimApi) => {
     // :nohlsearch does not cancel a highlight still waiting to be drawn, so a Ctrl-L sooner than
     // DRAW_DELAY after a search key, as when a macro replays n<C-l>, would see it come back. Clear
     // again just after it. A search key after Ctrl-L draws DRAW_DELAY after itself, so after this.
-    // Skipped in Visual mode, which :nohlsearch would end.
     setTimeout(() => {
       const vim = cm.state?.vim;
-      if (vim && !vim.visualMode) clear(cm);
+      if (!vim) return;
+      // A key after Ctrl-L may have started Visual mode, which running an ex command ends; vim.js
+      // reads only this flag to do so, so it is hidden for the call.
+      const visual = vim.visualMode;
+      vim.visualMode = false;
+      try {
+        clear(cm);
+      } finally {
+        vim.visualMode = visual;
+      }
     }, DRAW_DELAY);
   });
   Vim.mapCommand("<C-l>", "action", ACTION, {}, { context: "normal" });

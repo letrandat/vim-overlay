@@ -53,6 +53,12 @@ async function after({ page, cfg, check, play }) {
   check("C-l right after n clears the highlight", late.marks === 0 && !late.overlay && late.lastEx === "1", JSON.stringify(late));
   const again = await burst(["<C-l>", "n"]);
   check("n right after C-l highlights again", again.marks > 0 && again.overlay, JSON.stringify(again));
+  // Visual mode started right after C-l stays on, and the highlight still goes.
+  await step("<C-l>");
+  const visual = await burst(["n", "<C-l>", "v"]);
+  const mode = await page.evaluate(() => !!window.cm.state.vim.visualMode);
+  check("v right after C-l keeps Visual mode and the clear", visual.marks === 0 && !visual.overlay && mode, JSON.stringify({ ...visual, mode }));
+  await play(LINES, null, "<Esc>");
   await step("<C-l>");
 }
 
