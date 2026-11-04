@@ -10,7 +10,7 @@ export type Settings = { on: boolean; off: string[]; relativeNumbers: boolean };
 export const DEFAULTS: Settings = { on: true, off: [], relativeNumbers: false };
 // Features the popup gives a row of their own instead of a box in its list. They stay installed
 // while the master switch is on, even if an older popup saved them in off, and follow their own
-// setting on open pages at once (see watchSettings).
+// setting at once on pages loaded since the extension last loaded (see watchSettings).
 export const OWN_ROW = ["relative-numbers"];
 
 export const ASK = "vim-overlay:ask";

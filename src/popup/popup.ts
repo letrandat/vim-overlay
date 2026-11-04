@@ -1,6 +1,7 @@
 // The toolbar popup: a master switch, the "Relative line numbers" box and a checkbox per feature,
 // saved in extension storage. Pages read the settings when they load, so a change asks for a
-// reload, except a change to the relative line numbers box alone, which open pages apply at once.
+// reload, except a change to the relative line numbers box alone, which pages loaded since the
+// extension last loaded apply at once.
 import { DEFAULTS, OWN_ROW, type Settings } from "../settings.ts";
 import { KEYS } from "./features.ts";
 
