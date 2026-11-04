@@ -6,6 +6,7 @@ declare const chrome: {
       get<T extends object>(defaults: T): Promise<T>;
       set(items: object): Promise<void>;
     };
+    onChanged: { addListener(listener: (changes: object, area: string) => void): void };
   };
   tabs: { reload(): Promise<void> };
 };

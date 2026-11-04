@@ -1,15 +1,22 @@
-// The toolbar popup: a master switch and a checkbox per feature, saved in extension storage.
-// Pages read the settings when they load, so a change asks for a reload.
-import { DEFAULTS, type Settings } from "../settings.ts";
+// The toolbar popup: a master switch, the "Relative line numbers" box and a checkbox per feature,
+// saved in extension storage. Pages read the settings when they load, so a change asks for a
+// reload, except a change to the relative line numbers box alone, which pages loaded since the
+// extension last loaded apply at once.
+import { DEFAULTS, OWN_ROW, type Settings } from "../settings.ts";
 import { KEYS } from "./features.ts";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
-const names = Object.keys(KEYS) as (keyof typeof KEYS)[];
+// The features listed with a box each; one with a row of its own is not.
+const names = (Object.keys(KEYS) as (keyof typeof KEYS)[]).filter((name) => !OWN_ROW.includes(name));
 let settings: Settings = DEFAULTS;
 
 function render() {
   $<HTMLInputElement>("on").checked = settings.on;
   $("features").classList.toggle("off", !settings.on);
+  $("numbers").classList.toggle("off", !settings.on);
+  const numbers = $<HTMLInputElement>("rnu");
+  numbers.checked = settings.relativeNumbers;
+  numbers.disabled = !settings.on;
   for (const box of document.querySelectorAll<HTMLInputElement>("#features input")) {
     box.checked = !settings.off.includes(box.value);
     box.disabled = !settings.on;
@@ -19,10 +26,15 @@ function render() {
   $("all-on").hidden = !settings.off.length;
 }
 
+// Whether open pages need a reload to apply the change from prev to next.
+function needsReload(prev: Settings, next: Settings) {
+  return prev.on !== next.on || [...prev.off].sort().join() !== [...next.off].sort().join();
+}
+
 function save(next: Settings) {
+  if (needsReload(settings, next)) $("reload").hidden = false;
   settings = next;
   render();
-  $("reload").hidden = false;
   chrome.storage.sync.set(settings);
 }
 
@@ -39,11 +51,13 @@ $("features").append(
   })
 );
 $("on").addEventListener("change", () => save({ ...settings, on: $<HTMLInputElement>("on").checked }));
-$("all-on").addEventListener("click", () => save({ on: true, off: [] }));
+$("rnu").addEventListener("change", () => save({ ...settings, relativeNumbers: $<HTMLInputElement>("rnu").checked }));
+$("all-on").addEventListener("click", () => save({ ...settings, on: true, off: [] }));
 $("reload-page").addEventListener("click", () => chrome.tabs.reload().then(() => close()));
 
 chrome.storage.sync.get(DEFAULTS).then((stored) => {
-  // Drop the names of features the extension no longer has.
-  settings = { on: stored.on, off: stored.off.filter((n) => n in KEYS) };
+  // Drop the names of features the extension no longer lists, such as relative-numbers, which an
+  // older popup listed.
+  settings = { on: stored.on, off: stored.off.filter((n) => (names as string[]).includes(n)), relativeNumbers: stored.relativeNumbers };
   render();
 });

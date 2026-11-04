@@ -70,6 +70,28 @@ async function after({ page, cfg, check, play }) {
     };
   });
   check("folding arrow clear of the number", fold && fold.justify === "flex-end" && fold.numberEnd <= fold.arrowStart, JSON.stringify(fold));
+
+  // The popup's box, as the bridge passes on its changes: ticking shows the column at once and
+  // unticking hides it, while a change to another setting leaves :set rnu's choice alone.
+  const box = async (relativeNumbers, off = []) => {
+    await page.evaluate(({ relativeNumbers, off }) =>
+      document.dispatchEvent(new CustomEvent("vim-overlay:change", { detail: JSON.stringify({ on: true, off, relativeNumbers }) })), { relativeNumbers, off });
+    await page.waitForTimeout(300);
+    return { numbers: await numbers(page), rnu: (await state(page)).rnu };
+  };
+  await play(ABC, [2, 0], ":set nornu<CR>");
+  const other = await box(false, ["comment"]);
+  check("another setting's change leaves the column hidden", other.numbers === "" && other.rnu === false, JSON.stringify(other));
+  const ticked = await box(true);
+  check("ticking the box shows the column", ticked.numbers === "2,1,0,1,2" && ticked.rnu === true, JSON.stringify(ticked));
+  await play(ABC, null, ":set nornu<CR>");
+  const kept = await box(true, ["comment"]);
+  check("with the box ticked, :set nornu still hides it", kept.numbers === "" && kept.rnu === false, JSON.stringify(kept));
+  const shownAgain = await box(true);
+  check("a change to another setting does not bring it back", shownAgain.numbers === "" && shownAgain.rnu === false, JSON.stringify(shownAgain));
+  await play(ABC, null, ":set rnu<CR>");
+  const unticked = await box(false);
+  check("unticking the box hides the column", unticked.numbers === "" && unticked.rnu === false, JSON.stringify(unticked));
 }
 
 module.exports = { after };

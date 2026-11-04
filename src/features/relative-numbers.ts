@@ -1,11 +1,15 @@
 import type { Decoration, MonacoEditor, VimApi } from "../vim-api.ts";
+import { currentSettings, watchSettings, type Settings } from "../settings.ts";
 import { beforeKey } from "../vim/keys.ts";
 
 // A column of relative line numbers between Monaco's own numbers and the code, so a count for
 // j or k reads off the screen while anyone watching a shared screen still sees the usual
-// numbers. Monaco only (LeetCode, CodeSignal, CoderPad). Off until `:set rnu`, which shows it in
-// every editor of that Vim until `:set nornu` or a page reload. monaco-vim hands the editor to
-// vim.js only with a key, so `:set rnu` exists from the editor's first key.
+// numbers. Monaco only (LeetCode, CodeSignal, CoderPad). The popup's "Relative line numbers" box
+// shows it when ticked and hides it when unticked, at once on pages loaded since the extension
+// last loaded; it starts unticked.
+// `:set rnu` and `:set nornu` show and hide it in every editor of that Vim until the box changes
+// or the page reloads. monaco-vim hands the editor to vim.js only with a key, so the column and
+// `:set rnu` exist from the editor's first key.
 const CLASS = "vim-overlay-rel";
 const MAX = 999;
 const shown = new WeakSet<MonacoEditor>(); // Monaco editors
@@ -80,9 +84,18 @@ function show(editor: MonacoEditor, isOn: () => boolean, renders: Set<() => void
   render();
 }
 
+const ticked = (settings: Settings) => settings.relativeNumbers;
+
 export const install = (Vim: VimApi) => {
-  let on = false;
+  let box = ticked(currentSettings());
+  let on = box;
   const renders = new Set<() => void>(); // one per editor this Vim drew the column in
+  // A change to the box wins over :set rnu; a change to other settings leaves the column alone.
+  watchSettings((settings) => {
+    if (ticked(settings) === box) return;
+    box = on = ticked(settings);
+    renders.forEach((render) => render());
+  });
   let defined = false;
   beforeKey(Vim, (cm) => {
     if (!cm?.editor?.deltaDecorations || !(cm.editor as Partial<MonacoEditor>).onDidChangeCursorPosition) return;
