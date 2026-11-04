@@ -19,4 +19,5 @@ export const KEYS: Record<keyof typeof features, string> = {
   hover: "gh",
   "toggle-boolean": "C-a C-x",
   "organize-imports": "S-A-O",
+  "clear-highlight": "C-l",
 };

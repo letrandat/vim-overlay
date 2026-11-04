@@ -17,7 +17,7 @@ const DIST = path.join(__dirname, "..", "dist");
 const ID = [...crypto.createHash("sha256").update(DIST).digest("hex").slice(0, 32)]
   .map((d) => String.fromCharCode(97 + parseInt(d, 16)))
   .join("");
-const ALL = { defineMotion: 5, defineAction: 5, defineOperator: 1, mapCommand: 23, map: 1 };
+const ALL = { defineMotion: 5, defineAction: 6, defineOperator: 1, mapCommand: 24, map: 1 };
 
 (async () => {
   const server = await serve();
@@ -50,9 +50,9 @@ const ALL = { defineMotion: 5, defineAction: 5, defineOperator: 1, mapCommand: 2
     assert.strictEqual(await popup.isVisible("#reload"), false, "no reload prompt before a change");
     await popup.uncheck('#features input[value="move-lines"]');
     assert.strictEqual(await popup.isVisible("#reload"), true, "a change asks for a reload");
-    assert.strictEqual(await popup.textContent("#count"), "15 of 16 on");
+    assert.strictEqual(await popup.textContent("#count"), "16 of 17 on");
     // move-lines defines one motion and maps four keys.
-    assert.deepStrictEqual(await load(), { ...ALL, defineMotion: 4, mapCommand: 19 }, "every feature but move-lines");
+    assert.deepStrictEqual(await load(), { ...ALL, defineMotion: 4, mapCommand: 20 }, "every feature but move-lines");
     assert.notDeepStrictEqual(await moved(), ["b", "a"], "move-lines off: C-j does what the page does, not a move");
 
     await openPopup();
