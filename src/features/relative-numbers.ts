@@ -5,7 +5,8 @@ import { beforeKey } from "../vim/keys.ts";
 // A column of relative line numbers between Monaco's own numbers and the code, so a count for
 // j or k reads off the screen while anyone watching a shared screen still sees the usual
 // numbers. Monaco only (LeetCode, CodeSignal, CoderPad). The popup's "Relative line numbers" box
-// shows it when ticked and hides it when unticked, on open pages at once; it starts unticked.
+// shows it when ticked and hides it when unticked, at once on pages loaded since the extension
+// last loaded; it starts unticked.
 // `:set rnu` and `:set nornu` show and hide it in every editor of that Vim until the box changes
 // or the page reloads. monaco-vim hands the editor to vim.js only with a key, so the column and
 // `:set rnu` exist from the editor's first key.
