@@ -53,6 +53,7 @@ export interface Change {
 
 export interface RegisterController {
   unnamedRegister: { toString(): string };
+  getRegister(name: string): { toString(): string; setText(text: string): void };
   pushText: PushText;
 }
 export interface PushText {
@@ -66,6 +67,7 @@ export interface VimApi {
   mapCommand(keys: string, type: "motion" | "action" | "operator", name: string,
     args?: Record<string, string | boolean | number>, options?: { context?: string; isEdit?: boolean }): void;
   map(lhs: string, rhs: string, context: string): void;
+  handleEx(cm: Adapter, input: string): void;
   // vim.js reads a value by calling the callback with no value and sets one by calling it with the value.
   defineOption(name: string, defaultValue: undefined, type: "boolean", aliases: string[],
     callback: (value?: boolean) => boolean | undefined): void;

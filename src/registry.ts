@@ -20,6 +20,7 @@ import { install as rename } from "./features/rename.ts";
 import { install as hover } from "./features/hover.ts";
 import { install as toggleBoolean } from "./features/toggle-boolean.ts";
 import { install as organizeImports } from "./features/organize-imports.ts";
+import { install as clearHighlight } from "./features/clear-highlight.ts";
 
 export const hosts = { "monaco-vim": monacoVim, codemirror6, codemirror5, ace, webpack };
 
@@ -40,4 +41,5 @@ export const features = {
   hover,
   "toggle-boolean": toggleBoolean,
   "organize-imports": organizeImports,
+  "clear-highlight": clearHighlight,
 };
